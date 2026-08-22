@@ -8,7 +8,7 @@ interface AuthContextType {
   isGuest: boolean;
   isConfigured: boolean;
   signInWithEmail: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUpWithEmail: (email: string, password: string, fullName: string) => Promise<{ error: string | null }>;
+  signUpWithEmail: (email: string, password: string, fullName: string) => Promise<{ error: string | null; needsEmailConfirmation?: boolean }>;
   signOut: () => Promise<void>;
   continueAsGuest: () => void;
 }
@@ -110,7 +110,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [configured]);
 
-  const signInWithEmail = async (email: string, password: string) => {
+  const signInWithEmail = async (email: string, password: string): Promise<{ error: string | null }> => {
     if (!configured || !supabase) {
       // Local demo sign in
       const demoUser: UserProfile = {
@@ -127,11 +127,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
+        email: email.trim(),
         password,
       });
 
       if (error) {
+        if (error.message.includes('Invalid login credentials')) {
+          return { error: 'Email atau kata sandi salah. Silakan periksa kembali.' };
+        }
+        if (error.message.includes('Email not confirmed')) {
+          return { error: 'Email belum dikonfirmasi. Buka email Anda untuk klik link verifikasi, atau matikan fitur "Confirm email" di Supabase Dashboard.' };
+        }
         return { error: error.message };
       }
 
@@ -153,7 +159,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signUpWithEmail = async (email: string, password: string, fullName: string) => {
+  const signUpWithEmail = async (
+    email: string,
+    password: string,
+    fullName: string
+  ): Promise<{ error: string | null; needsEmailConfirmation?: boolean }> => {
     if (!configured || !supabase) {
       // Local demo sign up
       const demoUser: UserProfile = {
@@ -165,12 +175,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(demoUser);
       setIsGuest(true);
       localStorage.setItem('ft_guest_user', JSON.stringify(demoUser));
-      return { error: null };
+      return { error: null, needsEmailConfirmation: false };
     }
 
     try {
       const { data, error } = await supabase.auth.signUp({
-        email,
+        email: email.trim(),
         password,
         options: {
           data: {
@@ -180,10 +190,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (error) {
+        if (error.message.includes('User already registered')) {
+          return { error: 'Email ini sudah terdaftar. Silakan pilih menu Masuk (Login).' };
+        }
         return { error: error.message };
       }
 
-      if (data.user) {
+      // If Supabase created user but no session, email confirmation is active
+      if (data.user && !data.session) {
+        // If identities is empty array, it means user already exists in Supabase Auth
+        if (data.user.identities && data.user.identities.length === 0) {
+          return { error: 'Email ini sudah terdaftar. Silakan pilih menu Masuk (Login).' };
+        }
+        return { error: null, needsEmailConfirmation: true };
+      }
+
+      if (data.user && data.session) {
         setUser({
           id: data.user.id,
           email: data.user.email || '',
@@ -194,7 +216,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.removeItem('ft_guest_user');
       }
 
-      return { error: null };
+      return { error: null, needsEmailConfirmation: false };
     } catch (err: any) {
       return { error: err.message || 'Gagal mendaftar akun' };
     }

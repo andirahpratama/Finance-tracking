@@ -42,8 +42,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
         const res = await signUpWithEmail(email, password, fullName);
         if (res.error) {
           setErrorMsg(res.error);
+        } else if (res.needsEmailConfirmation) {
+          setSuccessMsg('Pendaftaran berhasil! Supabase mewajibkan verifikasi: Silakan buka email Anda untuk konfirmasi, atau matikan "Confirm email" di Supabase Dashboard agar bisa langsung masuk.');
         } else {
-          setSuccessMsg('Akun berhasil dibuat! Silakan masuk jika email konfirmasi tidak diperlukan.');
+          setSuccessMsg('Akun berhasil dibuat! Mengalihkan ke dashboard...');
           setTimeout(() => {
             onClose();
           }, 1200);
