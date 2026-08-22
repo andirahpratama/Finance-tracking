@@ -29,7 +29,7 @@ export const TransactionFilter: React.FC<TransactionFilterProps> = ({
             value={filters.searchTerm}
             onChange={(e) => onFilterChange({ ...filters, searchTerm: e.target.value })}
             placeholder="Cari transaksi berdasarkan catatan atau kategori..."
-            className="w-full pl-10 pr-4 py-2.5 bg-slate-900/80 border border-slate-800 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white text-sm placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
           />
         </div>
 
@@ -38,18 +38,18 @@ export const TransactionFilter: React.FC<TransactionFilterProps> = ({
           <button
             onClick={onExportCSV}
             title="Ekspor ke CSV"
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-200 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/80 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors"
           >
-            <Download className="w-3.5 h-3.5 text-emerald-400" />
+            <Download className="w-3.5 h-3.5 text-emerald-500" />
             <span className="hidden sm:inline">Ekspor</span> CSV
           </button>
 
           <button
             onClick={onPrintReport}
             title="Cetak Laporan Keuangan"
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-200 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/80 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors"
           >
-            <Printer className="w-3.5 h-3.5 text-cyan-400" />
+            <Printer className="w-3.5 h-3.5 text-cyan-500" />
             <span className="hidden sm:inline">Cetak</span> Laporan
           </button>
         </div>
@@ -58,13 +58,13 @@ export const TransactionFilter: React.FC<TransactionFilterProps> = ({
       {/* Filter Controls Row */}
       <div className="flex flex-wrap items-center gap-2 pt-1">
         {/* Type Filter Pills */}
-        <div className="flex items-center p-1 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
+        <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-xs">
           <button
             onClick={() => onFilterChange({ ...filters, type: 'all' })}
             className={`px-3 py-1 rounded-lg font-medium transition-all ${
               filters.type === 'all'
-                ? 'bg-slate-800 text-white font-bold'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold shadow-sm'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
           >
             Semua
@@ -73,8 +73,8 @@ export const TransactionFilter: React.FC<TransactionFilterProps> = ({
             onClick={() => onFilterChange({ ...filters, type: 'income' })}
             className={`px-3 py-1 rounded-lg font-medium transition-all ${
               filters.type === 'income'
-                ? 'bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 font-bold border border-emerald-500/30'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
           >
             Pemasukan
@@ -83,8 +83,8 @@ export const TransactionFilter: React.FC<TransactionFilterProps> = ({
             onClick={() => onFilterChange({ ...filters, type: 'expense' })}
             className={`px-3 py-1 rounded-lg font-medium transition-all ${
               filters.type === 'expense'
-                ? 'bg-rose-500/20 text-rose-300 font-bold border border-rose-500/30'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-rose-500/20 text-rose-600 dark:text-rose-300 font-bold border border-rose-500/30'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
           >
             Pengeluaran
@@ -95,7 +95,7 @@ export const TransactionFilter: React.FC<TransactionFilterProps> = ({
         <select
           value={filters.categoryId}
           onChange={(e) => onFilterChange({ ...filters, categoryId: e.target.value })}
-          className="px-3 py-1.5 bg-slate-900/80 border border-slate-800 rounded-xl text-slate-300 text-xs focus:outline-none focus:border-emerald-500"
+          className="px-3 py-1.5 bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-700 dark:text-slate-300 text-xs focus:outline-none focus:border-emerald-500"
         >
           <option value="">Semua Kategori</option>
           {categories.map((c) => (
@@ -109,7 +109,7 @@ export const TransactionFilter: React.FC<TransactionFilterProps> = ({
         <select
           value={filters.period}
           onChange={(e) => onFilterChange({ ...filters, period: e.target.value as any })}
-          className="px-3 py-1.5 bg-slate-900/80 border border-slate-800 rounded-xl text-slate-300 text-xs focus:outline-none focus:border-emerald-500"
+          className="px-3 py-1.5 bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-700 dark:text-slate-300 text-xs focus:outline-none focus:border-emerald-500"
         >
           <option value="all">Semua Waktu</option>
           <option value="this_month">Bulan Ini</option>
@@ -128,7 +128,7 @@ export const TransactionFilter: React.FC<TransactionFilterProps> = ({
                 period: 'all',
               })
             }
-            className="text-xs text-rose-400 hover:underline flex items-center gap-1 font-medium ml-auto"
+            className="text-xs text-rose-500 hover:underline flex items-center gap-1 font-medium ml-auto"
           >
             Reset Filter
           </button>
@@ -137,3 +137,4 @@ export const TransactionFilter: React.FC<TransactionFilterProps> = ({
     </div>
   );
 };
+

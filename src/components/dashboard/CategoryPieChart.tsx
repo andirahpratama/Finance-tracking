@@ -43,13 +43,13 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = ({ transactions
       const item = payload[0].payload;
       const percentage = total > 0 ? ((item.value / total) * 100).toFixed(1) : '0';
       return (
-        <div className="rounded-xl bg-slate-900/95 border border-slate-700/80 p-3 shadow-2xl backdrop-blur-md">
+        <div className="rounded-xl bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-700/80 p-3 shadow-2xl backdrop-blur-md transition-colors duration-200">
           <div className="flex items-center gap-2 mb-1">
             <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-            <span className="font-semibold text-white text-xs">{item.name}</span>
+            <span className="font-semibold text-slate-900 dark:text-white text-xs">{item.name}</span>
           </div>
-          <p className="text-sm font-bold text-white">{formatRupiah(item.value)}</p>
-          <p className="text-[11px] text-slate-400 font-medium">{percentage}% dari total</p>
+          <p className="text-sm font-bold text-slate-900 dark:text-white">{formatRupiah(item.value)}</p>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">{percentage}% dari total</p>
         </div>
       );
     }
@@ -60,16 +60,16 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = ({ transactions
     <div className="h-full flex flex-col justify-between">
       {/* Type Toggle Header */}
       <div className="flex items-center justify-between mb-4">
-        <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
           Distribusi Kategori
         </span>
-        <div className="flex items-center p-1 rounded-xl bg-slate-800/80 border border-slate-700/60 text-xs">
+        <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 text-xs">
           <button
             onClick={() => setActiveType('expense')}
             className={`px-3 py-1 rounded-lg font-medium transition-all ${
               activeType === 'expense'
-                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-rose-500/20 text-rose-600 dark:text-rose-300 border border-rose-500/40 shadow-sm font-bold'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             Pengeluaran
@@ -78,8 +78,8 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = ({ transactions
             onClick={() => setActiveType('income')}
             className={`px-3 py-1 rounded-lg font-medium transition-all ${
               activeType === 'income'
-                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-500/40 shadow-sm font-bold'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             Pemasukan
@@ -88,7 +88,7 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = ({ transactions
       </div>
 
       {data.length === 0 ? (
-        <div className="h-56 flex flex-col items-center justify-center text-slate-500">
+        <div className="h-56 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500">
           <p className="text-xs">Belum ada {activeType === 'expense' ? 'pengeluaran' : 'pemasukan'}</p>
         </div>
       ) : (
@@ -107,7 +107,7 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = ({ transactions
                   dataKey="value"
                 >
                   {data.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} stroke="#0f172a" strokeWidth={2} />
+                    <Cell key={`cell-${index}`} fill={entry.color} stroke="currentColor" className="text-white dark:text-slate-900 stroke-2" />
                   ))}
                 </Pie>
                 <Tooltip content={<CustomTooltip />} />
@@ -115,8 +115,8 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = ({ transactions
             </ResponsiveContainer>
             {/* Center Label */}
             <div className="absolute text-center pointer-events-none">
-              <span className="text-[10px] uppercase font-semibold text-slate-400 block">Total</span>
-              <span className="text-xs font-bold text-white">{formatRupiah(total)}</span>
+              <span className="text-[10px] uppercase font-semibold text-slate-400 dark:text-slate-400 block">Total</span>
+              <span className="text-xs font-bold text-slate-900 dark:text-white">{formatRupiah(total)}</span>
             </div>
           </div>
 
@@ -127,7 +127,7 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = ({ transactions
               return (
                 <div
                   key={idx}
-                  className="flex items-center justify-between text-xs p-1.5 rounded-lg bg-slate-800/40 border border-slate-800/60"
+                  className="flex items-center justify-between text-xs p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800/60"
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     <div
@@ -136,10 +136,10 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = ({ transactions
                     >
                       <CategoryIcon name={item.icon} className="w-3.5 h-3.5" />
                     </div>
-                    <span className="text-slate-300 font-medium truncate">{item.name}</span>
+                    <span className="text-slate-700 dark:text-slate-300 font-medium truncate">{item.name}</span>
                   </div>
                   <div className="text-right flex-shrink-0 ml-2">
-                    <span className="font-semibold text-white block">{formatRupiah(item.value)}</span>
+                    <span className="font-semibold text-slate-900 dark:text-white block">{formatRupiah(item.value)}</span>
                     <span className="text-[10px] text-slate-400">{pct}%</span>
                   </div>
                 </div>
@@ -151,3 +151,4 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = ({ transactions
     </div>
   );
 };
+

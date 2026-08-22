@@ -113,7 +113,7 @@ export const AnimatedMascot: React.FC<AnimatedMascotProps> = ({ balance }) => {
   };
 
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-950/90 border border-slate-800/80 p-5 backdrop-blur-xl shadow-xl">
+    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-white via-slate-50 to-slate-100 dark:from-slate-900/90 dark:via-slate-900/90 dark:to-slate-950/90 border border-slate-200 dark:border-slate-800/80 p-5 backdrop-blur-xl shadow-sm dark:shadow-xl transition-colors duration-200">
       {/* Background Ambient Glow */}
       <div
         className={`absolute -right-10 -top-10 h-56 w-56 rounded-full bg-gradient-to-br ${mascotInfo.glowClass} blur-3xl pointer-events-none transition-all duration-700`}
@@ -179,7 +179,7 @@ export const AnimatedMascot: React.FC<AnimatedMascotProps> = ({ balance }) => {
               </defs>
 
               {/* Shadow underneath */}
-              <ellipse cx="70" cy="132" rx="42" ry="7" fill="#020617" opacity="0.6" />
+              <ellipse cx="70" cy="132" rx="42" ry="7" fill="#020617" opacity="0.3" />
 
               {/* Ears */}
               {mood === 'happy' && (
@@ -431,8 +431,8 @@ export const AnimatedMascot: React.FC<AnimatedMascotProps> = ({ balance }) => {
             </svg>
           </motion.div>
 
-          <span className="text-[11px] text-slate-400 mt-1 flex items-center gap-1 hover:text-emerald-400 transition-colors">
-            <Heart className="w-3 h-3 text-pink-400 inline animate-pulse" />
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1 hover:text-emerald-500 transition-colors">
+            <Heart className="w-3 h-3 text-pink-500 inline animate-pulse" />
             Klik Finny untuk interaksi
           </span>
         </div>
@@ -441,7 +441,7 @@ export const AnimatedMascot: React.FC<AnimatedMascotProps> = ({ balance }) => {
         <div className="flex-1 w-full space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <span className="text-lg font-bold text-white tracking-tight">{mascotInfo.title}</span>
+              <span className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">{mascotInfo.title}</span>
               <span
                 className={`text-xs px-2.5 py-0.5 rounded-full font-medium border ${mascotInfo.badgeColor} flex items-center gap-1`}
               >
@@ -453,14 +453,14 @@ export const AnimatedMascot: React.FC<AnimatedMascotProps> = ({ balance }) => {
             </div>
 
             <div className="text-right">
-              <span className="text-xs text-slate-400 block">Total Saldo Terkini</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400 block">Total Saldo Terkini</span>
               <span
                 className={`text-lg font-extrabold tracking-tight ${
                   mood === 'happy'
-                    ? 'text-emerald-400'
+                    ? 'text-emerald-600 dark:text-emerald-400'
                     : mood === 'neutral'
-                    ? 'text-amber-400'
-                    : 'text-rose-400'
+                    ? 'text-amber-600 dark:text-amber-400'
+                    : 'text-rose-600 dark:text-rose-400'
                 }`}
               >
                 {formatRupiah(balance)}
@@ -476,11 +476,11 @@ export const AnimatedMascot: React.FC<AnimatedMascotProps> = ({ balance }) => {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.2 }}
-              className="relative p-3.5 rounded-xl bg-slate-800/80 border border-slate-700/60 shadow-inner"
+              className="relative p-3.5 rounded-xl bg-slate-100/90 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 shadow-inner"
             >
               <div className="flex items-start gap-2.5">
                 <span className="text-xl select-none">💬</span>
-                <p className="text-sm text-slate-200 leading-relaxed font-medium">
+                <p className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed font-medium">
                   {currentQuote}
                 </p>
               </div>
@@ -489,12 +489,12 @@ export const AnimatedMascot: React.FC<AnimatedMascotProps> = ({ balance }) => {
 
           {/* Progress / Mood indicator bar */}
           <div className="space-y-1">
-            <div className="flex justify-between text-[11px] text-slate-400 font-medium">
-              <span className={balance < 500000 ? 'text-rose-400 font-bold' : ''}>Kritis (&lt;500rb)</span>
-              <span className={balance >= 500000 && balance <= 1000000 ? 'text-amber-400 font-bold' : ''}>Waspada (500rb - 1jt)</span>
-              <span className={balance > 1000000 ? 'text-emerald-400 font-bold' : ''}>Aman (&gt;1jt)</span>
+            <div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+              <span className={balance < 500000 ? 'text-rose-500 font-bold' : ''}>Kritis (&lt;500rb)</span>
+              <span className={balance >= 500000 && balance <= 1000000 ? 'text-amber-500 font-bold' : ''}>Waspada (500rb - 1jt)</span>
+              <span className={balance > 1000000 ? 'text-emerald-500 font-bold' : ''}>Aman (&gt;1jt)</span>
             </div>
-            <div className="h-2 w-full rounded-full bg-slate-800 overflow-hidden flex">
+            <div className="h-2 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex">
               <div
                 className="h-full bg-gradient-to-r from-rose-500 to-rose-600 transition-all duration-500"
                 style={{ width: `${Math.min(100, Math.max(0, (balance / 500000) * 33.3))}%` }}

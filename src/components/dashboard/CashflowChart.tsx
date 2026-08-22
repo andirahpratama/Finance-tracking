@@ -49,26 +49,26 @@ export const CashflowChart: React.FC<CashflowChartProps> = ({ transactions }) =>
       const net = inc - exp;
 
       return (
-        <div className="rounded-xl bg-slate-900/95 border border-slate-700/80 p-3.5 shadow-2xl backdrop-blur-md">
-          <p className="text-xs font-semibold text-slate-300 mb-2">{formatDateIndo(label)}</p>
+        <div className="rounded-xl bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-700/80 p-3.5 shadow-2xl backdrop-blur-md transition-colors duration-200">
+          <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">{formatDateIndo(label)}</p>
           <div className="space-y-1.5 text-xs">
             <div className="flex items-center justify-between gap-4">
-              <span className="flex items-center gap-1.5 text-emerald-400">
+              <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
                 <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                 Pemasukan:
               </span>
-              <span className="font-bold text-white">{formatRupiah(inc)}</span>
+              <span className="font-bold text-slate-900 dark:text-white">{formatRupiah(inc)}</span>
             </div>
             <div className="flex items-center justify-between gap-4">
-              <span className="flex items-center gap-1.5 text-rose-400">
+              <span className="flex items-center gap-1.5 text-rose-600 dark:text-rose-400 font-medium">
                 <span className="w-2 h-2 rounded-full bg-rose-500"></span>
                 Pengeluaran:
               </span>
-              <span className="font-bold text-white">{formatRupiah(exp)}</span>
+              <span className="font-bold text-slate-900 dark:text-white">{formatRupiah(exp)}</span>
             </div>
-            <div className="border-t border-slate-800 pt-1 flex items-center justify-between gap-4">
-              <span className="text-slate-400">Selisih Bersih:</span>
-              <span className={`font-bold ${net >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+            <div className="border-t border-slate-100 dark:border-slate-800 pt-1 flex items-center justify-between gap-4">
+              <span className="text-slate-500 dark:text-slate-400">Selisih Bersih:</span>
+              <span className={`font-bold ${net >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                 {formatRupiah(net)}
               </span>
             </div>
@@ -81,9 +81,9 @@ export const CashflowChart: React.FC<CashflowChartProps> = ({ transactions }) =>
 
   if (chartData.length === 0) {
     return (
-      <div className="h-64 flex flex-col items-center justify-center text-slate-500 rounded-2xl bg-slate-900/40 border border-slate-800/80">
+      <div className="h-64 flex flex-col items-center justify-center text-slate-500 rounded-2xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800/80">
         <p className="text-sm">Belum ada data transaksi untuk ditampilkan pada grafik.</p>
-        <span className="text-xs text-slate-600 mt-1">Tambahkan pemasukan atau pengeluaran pertama Anda</span>
+        <span className="text-xs text-slate-400 dark:text-slate-600 mt-1">Tambahkan pemasukan atau pengeluaran pertama Anda</span>
       </div>
     );
   }
