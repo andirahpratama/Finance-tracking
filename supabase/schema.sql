@@ -13,9 +13,11 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   email TEXT,
   full_name TEXT,
   avatar_url TEXT,
+  monthly_savings_target NUMERIC(15, 2) DEFAULT 1000000.00,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
 
 -- 3. CREATE CATEGORIES TABLE
 CREATE TABLE IF NOT EXISTS public.categories (

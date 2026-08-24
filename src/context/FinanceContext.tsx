@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { Category, Transaction, TransactionType } from '../types';
+import { Category, Transaction, TransactionType, YearlyCashflowSummary, MonthlyCashflowItem } from '../types';
 import { INITIAL_CATEGORIES, getInitialDemoTransactions, DEFAULT_INCOME_CATEGORIES, DEFAULT_EXPENSE_CATEGORIES } from '../lib/defaultData';
 
 interface FinanceContextType {
@@ -13,7 +13,16 @@ interface FinanceContextType {
   totalBalance: number;
   thisMonthIncome: number;
   thisMonthExpense: number;
+  thisMonthSavings: number;
   savingsRate: number;
+  monthlySavingsTarget: number;
+  thisMonthSavingsProgress: number;
+  yearlySavingsTotal: number;
+  yearlyTargetTotal: number;
+  yearlySavingsProgress: number;
+  availableYears: number[];
+  getYearlySummary: (year: number) => YearlyCashflowSummary;
+  updateSavingsTarget: (newTarget: number) => Promise<{ error: string | null }>;
   addCategory: (category: Omit<Category, 'id' | 'user_id'>) => Promise<{ error: string | null }>;
   updateCategory: (id: string, category: Partial<Category>) => Promise<{ error: string | null }>;
   deleteCategory: (id: string) => Promise<{ error: string | null }>;
@@ -25,10 +34,13 @@ interface FinanceContextType {
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
 
+const DEFAULT_SAVINGS_TARGET = 1500000; // Default Rp 1.500.000 / bulan
+
 export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isGuest } = useAuth();
   const [categories, setCategories] = useState<Category[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [monthlySavingsTarget, setMonthlySavingsTarget] = useState<number>(DEFAULT_SAVINGS_TARGET);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const configured = isSupabaseConfigured();
 
@@ -42,6 +54,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!user) {
       setCategories([]);
       setTransactions([]);
+      setMonthlySavingsTarget(DEFAULT_SAVINGS_TARGET);
       setIsLoading(false);
       return;
     }
@@ -50,7 +63,26 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     if (configured && supabase && !isGuest) {
       try {
-        // 1. Fetch Categories
+        // 1. Fetch Profile & Savings Target
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('monthly_savings_target')
+          .eq('id', user.id)
+          .single();
+
+        if (profileData && profileData.monthly_savings_target) {
+          setMonthlySavingsTarget(Number(profileData.monthly_savings_target));
+        } else {
+          // Fallback to local storage or default
+          const savedTarget = localStorage.getItem(getStorageKey('savings_target'));
+          if (savedTarget) {
+            setMonthlySavingsTarget(Number(savedTarget) || DEFAULT_SAVINGS_TARGET);
+          } else {
+            setMonthlySavingsTarget(DEFAULT_SAVINGS_TARGET);
+          }
+        }
+
+        // 2. Fetch Categories (Strictly user_id scoped)
         const { data: catData, error: catError } = await supabase
           .from('categories')
           .select('*')
@@ -61,7 +93,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
         let userCategories: Category[] = catData || [];
 
-        // If user has no categories yet, initialize default ones
+        // If user has no categories yet, initialize default ones for this user
         if (userCategories.length === 0) {
           const defaultItems = [
             ...DEFAULT_INCOME_CATEGORIES.map(c => ({ ...c, user_id: user.id })),
@@ -79,7 +111,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
         setCategories(userCategories);
 
-        // 2. Fetch Transactions
+        // 3. Fetch Transactions (Strictly user_id scoped)
         const { data: txData, error: txError } = await supabase
           .from('transactions')
           .select('*, categories(name, icon, color)')
@@ -109,34 +141,50 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setIsLoading(false);
       }
     } else {
-      // Demo / Guest mode fallback using localStorage
+      // Demo / Guest mode fallback using localStorage strictly scoped to user.id
       const catKey = getStorageKey('categories');
       const txKey = getStorageKey('transactions');
+      const targetKey = getStorageKey('savings_target');
 
-      const savedCategories = localStorage.getItem(catKey);
-      const savedTransactions = localStorage.getItem(txKey);
-
-      if (savedCategories) {
-        try {
-          setCategories(JSON.parse(savedCategories));
-        } catch {
-          setCategories(INITIAL_CATEGORIES);
-        }
+      // Load savings target
+      const savedTarget = localStorage.getItem(targetKey);
+      if (savedTarget) {
+        setMonthlySavingsTarget(Number(savedTarget) || DEFAULT_SAVINGS_TARGET);
       } else {
-        setCategories(INITIAL_CATEGORIES);
-        localStorage.setItem(catKey, JSON.stringify(INITIAL_CATEGORIES));
+        setMonthlySavingsTarget(DEFAULT_SAVINGS_TARGET);
+        localStorage.setItem(targetKey, DEFAULT_SAVINGS_TARGET.toString());
       }
 
+      // Load categories
+      const savedCategories = localStorage.getItem(catKey);
+      if (savedCategories) {
+        try {
+          const parsed = JSON.parse(savedCategories);
+          setCategories(parsed);
+        } catch {
+          const cloned = INITIAL_CATEGORIES.map(c => ({ ...c, user_id: user.id }));
+          setCategories(cloned);
+          localStorage.setItem(catKey, JSON.stringify(cloned));
+        }
+      } else {
+        const cloned = INITIAL_CATEGORIES.map(c => ({ ...c, user_id: user.id }));
+        setCategories(cloned);
+        localStorage.setItem(catKey, JSON.stringify(cloned));
+      }
+
+      // Load transactions
+      const savedTransactions = localStorage.getItem(txKey);
       if (savedTransactions) {
         try {
-          setTransactions(JSON.parse(savedTransactions));
+          const parsed = JSON.parse(savedTransactions);
+          setTransactions(parsed);
         } catch {
-          const initial = getInitialDemoTransactions();
+          const initial = getInitialDemoTransactions(user.id);
           setTransactions(initial);
           localStorage.setItem(txKey, JSON.stringify(initial));
         }
       } else {
-        const initial = getInitialDemoTransactions();
+        const initial = getInitialDemoTransactions(user.id);
         setTransactions(initial);
         localStorage.setItem(txKey, JSON.stringify(initial));
       }
@@ -153,7 +201,6 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     if (!configured || !supabase || !user || isGuest) return;
 
-    // Create channel for real-time postgres changes
     const channel = supabase
       .channel(`realtime-finance-${user.id}`)
       .on(
@@ -170,6 +217,13 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           loadData();
         }
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` },
+        () => {
+          loadData();
+        }
+      )
       .subscribe();
 
     return () => {
@@ -179,7 +233,35 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
   }, [configured, user, isGuest, loadData]);
 
-  // CATEGORY OPERATIONS
+  // SAVINGS TARGET UPDATE
+  const updateSavingsTarget = async (newTarget: number): Promise<{ error: string | null }> => {
+    if (!user) return { error: 'Pengguna belum login' };
+    if (newTarget < 0) return { error: 'Target menabung tidak boleh negatif' };
+
+    setMonthlySavingsTarget(newTarget);
+    localStorage.setItem(getStorageKey('savings_target'), newTarget.toString());
+
+    if (configured && supabase && !isGuest) {
+      try {
+        const { error } = await supabase
+          .from('profiles')
+          .update({ monthly_savings_target: newTarget })
+          .eq('id', user.id);
+
+        if (error) {
+          // If column doesn't exist yet, we still save in localStorage and don't break
+          console.warn('Could not update monthly_savings_target in Supabase:', error.message);
+        }
+        return { error: null };
+      } catch (err: any) {
+        return { error: err.message };
+      }
+    }
+
+    return { error: null };
+  };
+
+  // CATEGORY OPERATIONS (Strictly Isolated per user)
   const addCategory = async (cat: Omit<Category, 'id' | 'user_id'>) => {
     if (!user) return { error: 'Pengguna belum login' };
 
@@ -413,22 +495,42 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const resetToDefaultData = () => {
-    setCategories(INITIAL_CATEGORIES);
-    const demo = getInitialDemoTransactions();
+    if (!user) return;
+    const clonedCats = INITIAL_CATEGORIES.map(c => ({ ...c, user_id: user.id }));
+    setCategories(clonedCats);
+    const demo = getInitialDemoTransactions(user.id);
     setTransactions(demo);
-    localStorage.setItem(getStorageKey('categories'), JSON.stringify(INITIAL_CATEGORIES));
+    setMonthlySavingsTarget(DEFAULT_SAVINGS_TARGET);
+    localStorage.setItem(getStorageKey('categories'), JSON.stringify(clonedCats));
     localStorage.setItem(getStorageKey('transactions'), JSON.stringify(demo));
+    localStorage.setItem(getStorageKey('savings_target'), DEFAULT_SAVINGS_TARGET.toString());
   };
 
-  // KPI Calculations
-  const { totalIncome, totalExpense, totalBalance, thisMonthIncome, thisMonthExpense, savingsRate } = useMemo(() => {
+  // KPI Calculations & Analytics
+  const {
+    totalIncome,
+    totalExpense,
+    totalBalance,
+    thisMonthIncome,
+    thisMonthExpense,
+    thisMonthSavings,
+    savingsRate,
+    thisMonthSavingsProgress,
+    yearlySavingsTotal,
+    yearlyTargetTotal,
+    yearlySavingsProgress,
+    availableYears,
+  } = useMemo(() => {
     let inc = 0;
     let exp = 0;
     let mInc = 0;
     let mExp = 0;
+    let yInc = 0;
+    let yExp = 0;
 
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth();
+    const yearsSet = new Set<number>([currentYear]);
 
     transactions.forEach(t => {
       const amount = Number(t.amount) || 0;
@@ -439,17 +541,40 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
 
       const txDate = new Date(t.date);
-      if (txDate.getFullYear() === currentYear && txDate.getMonth() === currentMonth) {
+      const txYear = txDate.getFullYear();
+      const txMonth = txDate.getMonth();
+
+      if (!isNaN(txYear)) {
+        yearsSet.add(txYear);
+      }
+
+      // Current Month
+      if (txYear === currentYear && txMonth === currentMonth) {
         if (t.type === 'income') {
           mInc += amount;
         } else {
           mExp += amount;
         }
       }
+
+      // Current Year
+      if (txYear === currentYear) {
+        if (t.type === 'income') {
+          yInc += amount;
+        } else {
+          yExp += amount;
+        }
+      }
     });
 
     const bal = inc - exp;
     const rate = inc > 0 ? Math.max(0, Math.round(((inc - exp) / inc) * 100)) : 0;
+    const mSavings = mInc - mExp;
+    const mSavingsProgress = monthlySavingsTarget > 0 ? Math.round((mSavings / monthlySavingsTarget) * 100) : 0;
+
+    const ySavings = yInc - yExp;
+    const yTarget = monthlySavingsTarget * 12;
+    const ySavingsProgress = yTarget > 0 ? Math.round((ySavings / yTarget) * 100) : 0;
 
     return {
       totalIncome: inc,
@@ -457,9 +582,91 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       totalBalance: bal,
       thisMonthIncome: mInc,
       thisMonthExpense: mExp,
+      thisMonthSavings: mSavings,
       savingsRate: rate,
+      thisMonthSavingsProgress: mSavingsProgress,
+      yearlySavingsTotal: ySavings,
+      yearlyTargetTotal: yTarget,
+      yearlySavingsProgress: ySavingsProgress,
+      availableYears: Array.from(yearsSet).sort((a, b) => b - a),
     };
-  }, [transactions]);
+  }, [transactions, monthlySavingsTarget]);
+
+  // Method to get 12-month cashflow breakdown for any specific year
+  const getYearlySummary = useCallback(
+    (year: number): YearlyCashflowSummary => {
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+      const fullMonthNames = [
+        'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
+      ];
+
+      const monthlyData: { income: number; expense: number; hasData: boolean }[] = Array.from(
+        { length: 12 },
+        () => ({ income: 0, expense: 0, hasData: false })
+      );
+
+      let totalYInc = 0;
+      let totalYExp = 0;
+
+      transactions.forEach(t => {
+        const d = new Date(t.date);
+        if (d.getFullYear() === year) {
+          const m = d.getMonth();
+          const amount = Number(t.amount) || 0;
+          if (m >= 0 && m < 12) {
+            monthlyData[m].hasData = true;
+            if (t.type === 'income') {
+              monthlyData[m].income += amount;
+              totalYInc += amount;
+            } else {
+              monthlyData[m].expense += amount;
+              totalYExp += amount;
+            }
+          }
+        }
+      });
+
+      let cumulative = 0;
+      const months: MonthlyCashflowItem[] = monthlyData.map((data, idx) => {
+        const net = data.income - data.expense;
+        cumulative += net;
+        const targetCumulative = monthlySavingsTarget * (idx + 1);
+
+        return {
+          monthIndex: idx,
+          monthName: monthNames[idx],
+          fullMonthName: `${fullMonthNames[idx]} ${year}`,
+          income: data.income,
+          expense: data.expense,
+          net,
+          cumulativeSavings: cumulative,
+          targetSavings: targetCumulative,
+          hasData: data.hasData,
+        };
+      });
+
+      const totalSavings = totalYInc - totalYExp;
+      const yearlyTarget = monthlySavingsTarget * 12;
+      const rate = totalYInc > 0 ? Math.max(0, Math.round((totalSavings / totalYInc) * 100)) : 0;
+      const targetAchievement = yearlyTarget > 0 ? Math.round((totalSavings / yearlyTarget) * 100) : 0;
+      const avgMonthly = Math.round(totalSavings / 12);
+
+      return {
+        year,
+        totalIncome: totalYInc,
+        totalExpense: totalYExp,
+        totalSavings,
+        monthlyTarget: monthlySavingsTarget,
+        yearlyTarget,
+        savingsRate: rate,
+        targetAchievementRate: targetAchievement,
+        averageMonthlySavings: avgMonthly,
+        months,
+      };
+    },
+    [transactions, monthlySavingsTarget]
+  );
 
   return (
     <FinanceContext.Provider
@@ -472,7 +679,16 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         totalBalance,
         thisMonthIncome,
         thisMonthExpense,
+        thisMonthSavings,
         savingsRate,
+        monthlySavingsTarget,
+        thisMonthSavingsProgress,
+        yearlySavingsTotal,
+        yearlyTargetTotal,
+        yearlySavingsProgress,
+        availableYears,
+        getYearlySummary,
+        updateSavingsTarget,
         addCategory,
         updateCategory,
         deleteCategory,
@@ -494,3 +710,4 @@ export const useFinance = () => {
   }
   return context;
 };
+

@@ -4,21 +4,36 @@ import confetti from 'canvas-confetti';
 import { MascotMood } from '../../types';
 import { formatRupiah } from '../../lib/formatters';
 import { Sparkles, AlertTriangle, Smile, Heart } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+
 
 interface AnimatedMascotProps {
   balance: number;
 }
 
 export const AnimatedMascot: React.FC<AnimatedMascotProps> = ({ balance }) => {
+  const { user } = useAuth();
   const [petCount, setPetCount] = useState(0);
   const [customQuote, setCustomQuote] = useState<string | null>(null);
   const prevBalanceRef = useRef<number>(balance);
+
+  const getTimeGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour >= 4 && hour < 11) return { text: 'Selamat Pagi ☀️', period: 'morning' };
+    if (hour >= 11 && hour < 15) return { text: 'Selamat Siang 🌤️', period: 'afternoon' };
+    if (hour >= 15 && hour < 18) return { text: 'Selamat Sore 🌇', period: 'evening' };
+    return { text: 'Selamat Malam 🌙', period: 'night' };
+  };
+
+  const greeting = getTimeGreeting();
+  const displayName = user?.full_name || user?.email?.split('@')[0] || 'Teman Keuangan';
 
   // Determine mood based on user requirements:
   // > 1.000.000 : Happy / Bahagia
   // 500.000 - 1.000.000 : Neutral / Datar
   // < 500.000 : Sad / Gelisah
   const mood: MascotMood = balance > 1000000 ? 'happy' : balance >= 500000 ? 'neutral' : 'sad';
+
 
   // Trigger celebratory confetti when balance crosses above 1.000.000
   useEffect(() => {
@@ -438,12 +453,27 @@ export const AnimatedMascot: React.FC<AnimatedMascotProps> = ({ balance }) => {
         </div>
 
         {/* Mascot Speech & Status Card */}
-        <div className="flex-1 w-full space-y-3">
+        <div className="flex-1 w-full space-y-3 min-w-0">
+          {/* User Friendly Greeting Banner */}
+          <div className="flex items-center justify-between gap-2 pb-1 border-b border-slate-200/60 dark:border-slate-800/60">
+            <div className="min-w-0">
+              <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 block sm:inline-block mr-1.5">
+                {greeting.text}
+              </span>
+              <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight truncate inline-block">
+                Halo, <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-500">{displayName}</span>! 👋
+              </h2>
+            </div>
+            <span className="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:block whitespace-nowrap">
+              Senang melihatmu kembali
+            </span>
+          </div>
+
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">{mascotInfo.title}</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm sm:text-base font-bold text-slate-900 dark:text-white tracking-tight">{mascotInfo.title}</span>
               <span
-                className={`text-xs px-2.5 py-0.5 rounded-full font-medium border ${mascotInfo.badgeColor} flex items-center gap-1`}
+                className={`text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${mascotInfo.badgeColor} flex items-center gap-1`}
               >
                 {mood === 'happy' && <Sparkles className="w-3 h-3" />}
                 {mood === 'neutral' && <Smile className="w-3 h-3" />}
@@ -453,9 +483,9 @@ export const AnimatedMascot: React.FC<AnimatedMascotProps> = ({ balance }) => {
             </div>
 
             <div className="text-right">
-              <span className="text-xs text-slate-500 dark:text-slate-400 block">Total Saldo Terkini</span>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 block">Total Saldo Terkini</span>
               <span
-                className={`text-lg font-extrabold tracking-tight ${
+                className={`text-base sm:text-lg font-extrabold tracking-tight ${
                   mood === 'happy'
                     ? 'text-emerald-600 dark:text-emerald-400'
                     : mood === 'neutral'
@@ -467,6 +497,7 @@ export const AnimatedMascot: React.FC<AnimatedMascotProps> = ({ balance }) => {
               </span>
             </div>
           </div>
+
 
           {/* Dialogue Speech Bubble */}
           <AnimatePresence mode="wait">

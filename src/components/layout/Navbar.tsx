@@ -9,7 +9,13 @@ import {
   Radio,
   Sparkles,
   RotateCcw,
+  Menu,
+  X,
+  Target,
+  ChevronRight,
 } from 'lucide-react';
+
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
 import { useFinance } from '../../context/FinanceContext';
 import { ThemeToggle } from '../ui/ThemeToggle';
@@ -19,6 +25,7 @@ interface NavbarProps {
   onOpenExpenseModal: () => void;
   onOpenCategoryManager: () => void;
   onOpenAuthModal: () => void;
+  onOpenSavingsTargetModal?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -26,76 +33,93 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenExpenseModal,
   onOpenCategoryManager,
   onOpenAuthModal,
+  onOpenSavingsTargetModal,
 }) => {
   const { user, isGuest, isConfigured, signOut } = useAuth();
   const { resetToDefaultData } = useFinance();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const closeMobileMenu = () => setIsMobileMenuOpen(false);
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-slate-200 dark:border-slate-800/80 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl transition-colors duration-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 gap-4">
+    <header className="sticky top-0 z-40 w-full border-b border-slate-200 dark:border-slate-800/80 bg-white/90 dark:bg-slate-950/90 backdrop-blur-xl transition-colors duration-200">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16 gap-2 sm:gap-4">
           {/* Logo & Brand */}
-          <div className="flex items-center gap-3 flex-shrink-0">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 via-teal-500 to-emerald-400 flex items-center justify-center shadow-lg shadow-emerald-950/20 dark:shadow-emerald-950">
-              <Wallet className="w-5 h-5 text-white dark:text-slate-950" />
+          <div className="flex items-center gap-2.5 sm:gap-3 flex-shrink-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 via-teal-500 to-emerald-400 flex items-center justify-center shadow-md shadow-emerald-950/20 dark:shadow-emerald-950">
+              <Wallet className="w-4 h-4 sm:w-5 sm:h-5 text-white dark:text-slate-950" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-black text-lg text-slate-900 dark:text-white tracking-tight">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <span className="font-black text-base sm:text-lg text-slate-900 dark:text-white tracking-tight truncate">
                   Finance Tracking
                 </span>
                 {isConfigured && !isGuest ? (
-                  <span className="hidden sm:inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-semibold">
+                  <span className="hidden lg:inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-semibold">
                     <Radio className="w-2.5 h-2.5 animate-pulse text-emerald-500" />
-                    Supabase Realtime
+                    Realtime
                   </span>
                 ) : (
-                  <span className="hidden sm:inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-semibold">
+                  <span className="hidden lg:inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-semibold">
                     <Sparkles className="w-2.5 h-2.5 text-amber-500" />
-                    Demo Mode
+                    Demo
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 hidden sm:block">
+              <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 hidden sm:block truncate">
                 Pencatatan Keuangan Pribadi & Keluarga
               </p>
             </div>
           </div>
 
-          {/* Action Buttons & Profile */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          {/* DESKTOP Action Buttons & Profile (Visible on md and up) */}
+          <div className="hidden md:flex items-center gap-2 lg:gap-3">
             {/* Quick Action: Tambah Pengeluaran */}
             <button
               onClick={onOpenExpenseModal}
-              className="flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-md shadow-rose-950/20 dark:shadow-rose-950 transition-all active:scale-95"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-md shadow-rose-950/20 dark:shadow-rose-950 transition-all active:scale-95"
             >
               <ArrowDownRight className="w-4 h-4" />
-              <span className="hidden md:inline">Tambah</span> Pengeluaran
+              <span>Pengeluaran</span>
             </button>
 
             {/* Quick Action: Tambah Pemasukan */}
             <button
               onClick={onOpenIncomeModal}
-              className="flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-950/20 dark:shadow-emerald-950 transition-all active:scale-95"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-950/20 dark:shadow-emerald-950 transition-all active:scale-95"
             >
               <ArrowUpRight className="w-4 h-4" />
-              <span className="hidden md:inline">Tambah</span> Pemasukan
+              <span>Pemasukan</span>
             </button>
+
+            {/* Savings Target Button */}
+            {onOpenSavingsTargetModal && (
+              <button
+                onClick={onOpenSavingsTargetModal}
+                title="Atur Target Menabung"
+                className="flex items-center gap-1 px-2.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors"
+              >
+                <Target className="w-4 h-4 text-emerald-500" />
+                <span className="hidden lg:inline">Target</span>
+              </button>
+            )}
 
             {/* Category Manager Button */}
             <button
               onClick={onOpenCategoryManager}
               title="Kelola Kategori"
-              className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 transition-colors"
+              className="flex items-center gap-1 px-2.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors"
             >
-              <Tags className="w-4 h-4" />
+              <Tags className="w-4 h-4 text-cyan-500" />
+              <span className="hidden lg:inline">Kategori</span>
             </button>
 
             {/* Dark/Light Mode Switcher */}
             <ThemeToggle />
 
-            {/* User Profile / Auth */}
+            {/* User Profile / Auth Dropdown */}
             <div className="relative">
               {user ? (
                 <div>
@@ -164,9 +188,246 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </div>
           </div>
+
+          {/* MOBILE Header Controls (< md) - Compact & Zero-Scroll */}
+          <div className="flex md:hidden items-center gap-1.5">
+            {/* Quick Add Income (+) */}
+            <button
+              onClick={onOpenIncomeModal}
+              title="Tambah Pemasukan"
+              className="p-2 rounded-xl bg-emerald-600 text-white shadow-sm active:scale-95 transition-transform"
+            >
+              <ArrowUpRight className="w-4 h-4" />
+            </button>
+
+            {/* Quick Add Expense (-) */}
+            <button
+              onClick={onOpenExpenseModal}
+              title="Tambah Pengeluaran"
+              className="p-2 rounded-xl bg-rose-600 text-white shadow-sm active:scale-95 transition-transform"
+            >
+              <ArrowDownRight className="w-4 h-4" />
+            </button>
+
+            {/* Theme Toggle */}
+            <ThemeToggle />
+
+            {/* Mobile Hamburger Menu Button */}
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="p-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 active:scale-95 transition-transform"
+              aria-label="Buka Menu"
+            >
+              {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* MOBILE SLIDE-OVER DRAWER */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <div className="fixed inset-0 w-screen h-[100dvh] z-50 md:hidden overflow-hidden pointer-events-auto">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={closeMobileMenu}
+              className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm"
+            />
+
+            {/* Drawer Sheet */}
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="absolute top-0 right-0 bottom-0 h-full w-[85%] max-w-sm bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-2xl p-5 flex flex-col justify-between overflow-y-auto z-10"
+            >
+              <div className="space-y-5">
+                {/* Drawer Header */}
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white">
+                      <Wallet className="w-4 h-4" />
+                    </div>
+                    <span className="font-extrabold text-sm text-slate-900 dark:text-white">Finance Menu</span>
+                  </div>
+                  <button
+                    onClick={closeMobileMenu}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* User Greeting & Status Card in Drawer */}
+                {user && (
+                  <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 space-y-1">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-500 flex items-center justify-center text-white font-bold text-sm">
+                        {user.full_name?.charAt(0).toUpperCase() || 'U'}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                          {user.full_name || 'Pengguna'}
+                        </p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{user.email}</p>
+                      </div>
+                    </div>
+                    <div className="pt-1 flex items-center gap-2">
+                      <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold border border-emerald-500/20">
+                        {isGuest ? 'Mode Tamu (Offline)' : 'Online (Supabase)'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Quick Add Transactions in Drawer */}
+                <div className="space-y-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                    Aksi Transaksi Cepat
+                  </span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => {
+                        closeMobileMenu();
+                        onOpenExpenseModal();
+                      }}
+                      className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-rose-600 text-white text-xs font-bold shadow-sm active:scale-95"
+                    >
+                      <ArrowDownRight className="w-4 h-4" />
+                      + Pengeluaran
+                    </button>
+                    <button
+                      onClick={() => {
+                        closeMobileMenu();
+                        onOpenIncomeModal();
+                      }}
+                      className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-bold shadow-sm active:scale-95"
+                    >
+                      <ArrowUpRight className="w-4 h-4" />
+                      + Pemasukan
+                    </button>
+                  </div>
+                </div>
+
+                {/* Navigation Menu Links */}
+                <div className="space-y-1">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-2">
+                    Fitur & Pengaturan
+                  </span>
+
+                  {/* Target Menabung Link */}
+                  {onOpenSavingsTargetModal && (
+                    <button
+                      onClick={() => {
+                        closeMobileMenu();
+                        onOpenSavingsTargetModal();
+                      }}
+                      className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 text-left transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                          <Target className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-900 dark:text-white">Target Menabung</p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">Atur komitmen tabungan bulanan</p>
+                        </div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-slate-400" />
+                    </button>
+                  )}
+
+                  {/* Kelola Kategori Link */}
+                  <button
+                    onClick={() => {
+                      closeMobileMenu();
+                      onOpenCategoryManager();
+                    }}
+                    className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 text-left transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
+                        <Tags className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-900 dark:text-white">Kelola Kategori</p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">Tambah / ubah jenis transaksi</p>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  </button>
+
+                  {/* Reset Demo Data Link */}
+                  <button
+                    onClick={() => {
+                      closeMobileMenu();
+                      resetToDefaultData();
+                    }}
+                    className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 text-left transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                        <RotateCcw className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-900 dark:text-white">Reset Contoh Data</p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">Kembalikan data demo awal</p>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Drawer Footer Auth Button */}
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
+                {user ? (
+                  <>
+                    {isGuest && (
+                      <button
+                        onClick={() => {
+                          closeMobileMenu();
+                          onOpenAuthModal();
+                        }}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold border border-emerald-500/20"
+                      >
+                        <LogIn className="w-4 h-4" />
+                        Hubungkan Akun / Login
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        closeMobileMenu();
+                        signOut();
+                      }}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs font-bold border border-rose-500/20"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Keluar (Sign Out)
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => {
+                      closeMobileMenu();
+                      onOpenAuthModal();
+                    }}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-bold shadow-md shadow-emerald-950/20"
+                  >
+                    <LogIn className="w-4 h-4" />
+                    Masuk ke Akun
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </header>
   );
 };
-

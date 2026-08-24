@@ -30,6 +30,7 @@ export interface UserProfile {
   email: string;
   full_name?: string;
   avatar_url?: string;
+  monthly_savings_target?: number;
   created_at?: string;
 }
 
@@ -52,6 +53,33 @@ export interface FilterOptions {
   endDate?: string;
 }
 
+export type ChartViewMode = 'daily' | 'monthly' | 'yearly';
+
+export interface MonthlyCashflowItem {
+  monthIndex: number; // 0-11
+  monthName: string; // "Jan", "Feb", etc.
+  fullMonthName: string; // "Januari 2026", etc.
+  income: number;
+  expense: number;
+  net: number;
+  cumulativeSavings: number;
+  targetSavings: number;
+  hasData: boolean;
+}
+
+export interface YearlyCashflowSummary {
+  year: number;
+  totalIncome: number;
+  totalExpense: number;
+  totalSavings: number;
+  monthlyTarget: number;
+  yearlyTarget: number;
+  savingsRate: number;
+  targetAchievementRate: number;
+  averageMonthlySavings: number;
+  months: MonthlyCashflowItem[];
+}
+
 export interface MonthlySummary {
   month: string;
   income: number;
@@ -68,3 +96,4 @@ export interface CategorySummary {
   total: number;
   percentage: number;
 }
+

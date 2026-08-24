@@ -58,10 +58,10 @@ export const TransactionFilter: React.FC<TransactionFilterProps> = ({
       {/* Filter Controls Row */}
       <div className="flex flex-wrap items-center gap-2 pt-1">
         {/* Type Filter Pills */}
-        <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-xs">
+        <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-xs flex-shrink-0">
           <button
             onClick={() => onFilterChange({ ...filters, type: 'all' })}
-            className={`px-3 py-1 rounded-lg font-medium transition-all ${
+            className={`px-2.5 sm:px-3 py-1 rounded-lg font-medium transition-all ${
               filters.type === 'all'
                 ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold shadow-sm'
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -71,7 +71,7 @@ export const TransactionFilter: React.FC<TransactionFilterProps> = ({
           </button>
           <button
             onClick={() => onFilterChange({ ...filters, type: 'income' })}
-            className={`px-3 py-1 rounded-lg font-medium transition-all ${
+            className={`px-2.5 sm:px-3 py-1 rounded-lg font-medium transition-all ${
               filters.type === 'income'
                 ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 font-bold border border-emerald-500/30'
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -81,7 +81,7 @@ export const TransactionFilter: React.FC<TransactionFilterProps> = ({
           </button>
           <button
             onClick={() => onFilterChange({ ...filters, type: 'expense' })}
-            className={`px-3 py-1 rounded-lg font-medium transition-all ${
+            className={`px-2.5 sm:px-3 py-1 rounded-lg font-medium transition-all ${
               filters.type === 'expense'
                 ? 'bg-rose-500/20 text-rose-600 dark:text-rose-300 font-bold border border-rose-500/30'
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -95,7 +95,7 @@ export const TransactionFilter: React.FC<TransactionFilterProps> = ({
         <select
           value={filters.categoryId}
           onChange={(e) => onFilterChange({ ...filters, categoryId: e.target.value })}
-          className="px-3 py-1.5 bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-700 dark:text-slate-300 text-xs focus:outline-none focus:border-emerald-500"
+          className="flex-1 sm:flex-initial min-w-[130px] px-3 py-1.5 bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-700 dark:text-slate-300 text-xs focus:outline-none focus:border-emerald-500"
         >
           <option value="">Semua Kategori</option>
           {categories.map((c) => (
@@ -109,7 +109,7 @@ export const TransactionFilter: React.FC<TransactionFilterProps> = ({
         <select
           value={filters.period}
           onChange={(e) => onFilterChange({ ...filters, period: e.target.value as any })}
-          className="px-3 py-1.5 bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-700 dark:text-slate-300 text-xs focus:outline-none focus:border-emerald-500"
+          className="flex-1 sm:flex-initial min-w-[110px] px-3 py-1.5 bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-700 dark:text-slate-300 text-xs focus:outline-none focus:border-emerald-500"
         >
           <option value="all">Semua Waktu</option>
           <option value="this_month">Bulan Ini</option>
@@ -137,4 +137,5 @@ export const TransactionFilter: React.FC<TransactionFilterProps> = ({
     </div>
   );
 };
+
 

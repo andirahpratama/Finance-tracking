@@ -5,6 +5,8 @@ import { Navbar } from './components/layout/Navbar';
 import { Footer } from './components/layout/Footer';
 import { AnimatedMascot } from './components/mascot/AnimatedMascot';
 import { StatCard } from './components/dashboard/StatCard';
+import { SavingsTargetCard } from './components/dashboard/SavingsTargetCard';
+import { SavingsTargetModal } from './components/dashboard/SavingsTargetModal';
 import { CashflowChart } from './components/dashboard/CashflowChart';
 import { CategoryPieChart } from './components/dashboard/CategoryPieChart';
 import { TransactionList } from './components/transactions/TransactionList';
@@ -45,6 +47,7 @@ export const App: React.FC = () => {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isSavingsTargetModalOpen, setIsSavingsTargetModalOpen] = useState(false);
 
   // Filters state
   const [filters, setFilters] = useState<FilterOptions>({
@@ -157,22 +160,26 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col selection:bg-emerald-500 selection:text-white transition-colors duration-200">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col selection:bg-emerald-500 selection:text-white transition-colors duration-200 overflow-x-hidden">
       {/* Top Navigation */}
       <Navbar
         onOpenIncomeModal={handleOpenIncome}
         onOpenExpenseModal={handleOpenExpense}
         onOpenCategoryManager={() => setIsCategoryModalOpen(true)}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onOpenSavingsTargetModal={() => setIsSavingsTargetModalOpen(true)}
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        {/* 1. Animated Mascot & Live Mood Section */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-6 space-y-5 sm:space-y-6">
+        {/* 1. Animated Mascot, Friendly Greeting & Live Mood Section */}
         <AnimatedMascot balance={totalBalance} />
 
-        {/* 2. KPI Summary Cards Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* 2. Monthly & Yearly Savings Target Progress Card */}
+        <SavingsTargetCard onOpenTargetModal={() => setIsSavingsTargetModalOpen(true)} />
+
+        {/* 3. KPI Summary Cards Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
           <StatCard
             title="Total Saldo Saat Ini"
             amount={totalBalance}
@@ -206,18 +213,18 @@ export const App: React.FC = () => {
           />
         </div>
 
-        {/* 3. Visual Charts Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Cashflow Chart (2 Columns) */}
-          <div className="lg:col-span-2 rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 p-5 backdrop-blur-xl shadow-sm dark:shadow-xl flex flex-col justify-between transition-colors duration-200">
+        {/* 4. Visual Charts Grid (Monthly, Yearly & Category Analytics) */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-6">
+          {/* Cashflow & Yearly Chart (2 Columns) */}
+          <div className="lg:col-span-2 rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 p-4 sm:p-5 backdrop-blur-xl shadow-sm dark:shadow-xl flex flex-col justify-between transition-colors duration-200">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                   <BarChart3 className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Arus Kas (Pemasukan vs Pengeluaran)</h3>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">Grafik tren transaksi real-time</span>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Analisis Arus Kas & Tabungan</h3>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">Grafik perbandingan 1 tahun & tren harian</span>
                 </div>
               </div>
             </div>
@@ -225,13 +232,13 @@ export const App: React.FC = () => {
           </div>
 
           {/* Category Donut Breakdown Chart (1 Column) */}
-          <div className="rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 p-5 backdrop-blur-xl shadow-sm dark:shadow-xl transition-colors duration-200">
+          <div className="rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 p-4 sm:p-5 backdrop-blur-xl shadow-sm dark:shadow-xl transition-colors duration-200">
             <CategoryPieChart transactions={transactions} />
           </div>
         </div>
 
-        {/* 4. Transactions List & Filter Section */}
-        <div className="rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 p-5 backdrop-blur-xl shadow-sm dark:shadow-xl space-y-5 transition-colors duration-200">
+        {/* 5. Transactions List & Filter Section */}
+        <div className="rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 p-4 sm:p-5 backdrop-blur-xl shadow-sm dark:shadow-xl space-y-4 sm:space-y-5 transition-colors duration-200">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
             <div className="flex items-center gap-2.5">
               <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
@@ -291,6 +298,11 @@ export const App: React.FC = () => {
         onClose={() => setIsCategoryModalOpen(false)}
       />
 
+      <SavingsTargetModal
+        isOpen={isSavingsTargetModalOpen}
+        onClose={() => setIsSavingsTargetModalOpen(false)}
+      />
+
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
@@ -299,3 +311,4 @@ export const App: React.FC = () => {
   );
 };
 export default App;
+

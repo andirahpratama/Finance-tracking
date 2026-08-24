@@ -125,111 +125,149 @@ export const AVAILABLE_COLORS = [
   '#64748B', // Slate
 ];
 
-// Helper to generate dynamic demo transactions relative to current date
-export const getInitialDemoTransactions = (): Transaction[] => {
-  const today = new Date();
-  const formatIsoDate = (offsetDays: number) => {
-    const d = new Date(today);
-    d.setDate(d.getDate() - offsetDays);
-    return d.toISOString().split('T')[0];
+// Helper to generate dynamic demo transactions relative to current date and across the year
+export const getInitialDemoTransactions = (userId?: string): Transaction[] => {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth(); // 0-11
+
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  const makeDate = (year: number, month: number, day: number) => {
+    return `${year}-${pad(month + 1)}-${pad(day)}`;
   };
 
-  return [
-    {
-      id: 'tx-1',
+  const list: Transaction[] = [];
+  let idCounter = 1;
+
+  // Generate historical monthly data for past months in current year (up to current month)
+  const startMonth = Math.max(0, currentMonth - 5); // past 6 months
+
+  for (let m = startMonth; m <= currentMonth; m++) {
+    // Income 1: Gaji Suami
+
+    list.push({
+      id: `tx-demo-${idCounter++}`,
+      user_id: userId,
       category_id: 'cat-inc-1',
       category_name: 'Gaji Suami',
       category_icon: 'Wallet',
       category_color: '#10B981',
       type: 'income',
       amount: 4500000,
-      date: formatIsoDate(5),
-      notes: 'Gaji pokok bulanan',
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: 'tx-2',
+      date: makeDate(currentYear, m, 25),
+      notes: `Gaji bulanan ${new Date(currentYear, m, 1).toLocaleString('id-ID', { month: 'short' })}`,
+      created_at: new Date(currentYear, m, 25).toISOString(),
+    });
+
+    // Income 2: Gaji Istri
+    list.push({
+      id: `tx-demo-${idCounter++}`,
+      user_id: userId,
       category_id: 'cat-inc-2',
       category_name: 'Gaji Istri',
       category_icon: 'Briefcase',
       category_color: '#06B6D4',
       type: 'income',
       amount: 3500000,
-      date: formatIsoDate(5),
-      notes: 'Gaji pokok bulanan',
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: 'tx-3',
-      category_id: 'cat-inc-3',
-      category_name: 'Bisnis',
-      category_icon: 'TrendingUp',
-      category_color: '#8B5CF6',
-      type: 'income',
-      amount: 1250000,
-      date: formatIsoDate(3),
-      notes: 'Profit penjualan online store',
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: 'tx-4',
+      date: makeDate(currentYear, m, 25),
+      notes: `Gaji bulanan istri`,
+      created_at: new Date(currentYear, m, 25).toISOString(),
+    });
+
+    // Income 3: Bisnis / Side income (every other month)
+    if (m % 2 === 0) {
+      list.push({
+        id: `tx-demo-${idCounter++}`,
+        user_id: userId,
+        category_id: 'cat-inc-3',
+        category_name: 'Bisnis',
+        category_icon: 'TrendingUp',
+        category_color: '#8B5CF6',
+        type: 'income',
+        amount: 1200000 + (m * 150000),
+        date: makeDate(currentYear, m, 15),
+        notes: `Profit toko online & komisi proyek`,
+        created_at: new Date(currentYear, m, 15).toISOString(),
+      });
+    }
+
+    // Expense 1: Belanja Kebutuhan Harian
+    list.push({
+      id: `tx-demo-${idCounter++}`,
+      user_id: userId,
+      category_id: 'cat-exp-2',
+      category_name: 'Belanja Kebutuhan Harian',
+      category_icon: 'ShoppingCart',
+      category_color: '#F97316',
+      type: 'expense',
+      amount: 1650000 + (m % 3 * 100000),
+      date: makeDate(currentYear, m, 5),
+      notes: `Kebutuhan pokok rumah tangga & sembako`,
+      created_at: new Date(currentYear, m, 5).toISOString(),
+    });
+
+    // Expense 2: Sekolah Anak
+    list.push({
+      id: `tx-demo-${idCounter++}`,
+      user_id: userId,
       category_id: 'cat-exp-6',
       category_name: 'Sekolah Anak',
       category_icon: 'GraduationCap',
       category_color: '#14B8A6',
       type: 'expense',
       amount: 1200000,
-      date: formatIsoDate(4),
-      notes: 'SPP dan buku les matematika',
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: 'tx-5',
-      category_id: 'cat-exp-2',
-      category_name: 'Belanja Kebutuhan Harian',
-      category_icon: 'ShoppingCart',
-      category_color: '#F97316',
-      type: 'expense',
-      amount: 850000,
-      date: formatIsoDate(3),
-      notes: 'Belanja bulanan supermarket',
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: 'tx-6',
+      date: makeDate(currentYear, m, 10),
+      notes: `SPP sekolah & les bimbel`,
+      created_at: new Date(currentYear, m, 10).toISOString(),
+    });
+
+    // Expense 3: Belanja Makanan & Dapur
+    list.push({
+      id: `tx-demo-${idCounter++}`,
+      user_id: userId,
       category_id: 'cat-exp-1',
       category_name: 'Belanja Makanan',
       category_icon: 'Utensils',
       category_color: '#EF4444',
       type: 'expense',
-      amount: 450000,
-      date: formatIsoDate(2),
-      notes: 'Bahan masakan mingguan & sayur segar',
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: 'tx-7',
+      amount: 1400000 + (m % 2 * 120000),
+      date: makeDate(currentYear, m, 12),
+      notes: `Bahan masakan harian sayur & lauk`,
+      created_at: new Date(currentYear, m, 12).toISOString(),
+    });
+
+    // Expense 4: Transportasi & Bensin
+    list.push({
+      id: `tx-demo-${idCounter++}`,
+      user_id: userId,
       category_id: 'cat-exp-3',
       category_name: 'Transportasi',
       category_icon: 'Car',
       category_color: '#3B82F6',
       type: 'expense',
-      amount: 300000,
-      date: formatIsoDate(1),
-      notes: 'Bensin & saldo e-toll',
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: 'tx-8',
+      amount: 550000,
+      date: makeDate(currentYear, m, 18),
+      notes: `Bensin motor/mobil & saldo e-toll`,
+      created_at: new Date(currentYear, m, 18).toISOString(),
+    });
+
+    // Expense 5: Jajan Anak & Rekreasi
+    list.push({
+      id: `tx-demo-${idCounter++}`,
+      user_id: userId,
       category_id: 'cat-exp-4',
       category_name: 'Jajan Anak',
       category_icon: 'Baby',
       category_color: '#EC4899',
       type: 'expense',
-      amount: 150000,
-      date: formatIsoDate(0),
-      notes: 'Es krim & mainan edukasi',
-      created_at: new Date().toISOString(),
-    },
-  ];
+      amount: 350000 + (m % 2 * 80000),
+      date: makeDate(currentYear, m, 20),
+      notes: `Jajan mingguan & mainan edukatif`,
+      created_at: new Date(currentYear, m, 20).toISOString(),
+    });
+  }
+
+  // Sort descending by date
+  return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 };
+
