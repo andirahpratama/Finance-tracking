@@ -13,10 +13,16 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   email TEXT,
   full_name TEXT,
   avatar_url TEXT,
-  monthly_savings_target NUMERIC(15, 2) DEFAULT 1000000.00,
+  monthly_savings_target NUMERIC(15, 2) DEFAULT 1500000.00,
+  balance_safe_threshold NUMERIC(15, 2) DEFAULT 1000000.00,
+  balance_warning_threshold NUMERIC(15, 2) DEFAULT 500000.00,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- 2b. ADD THRESHOLD COLUMNS IF TABLE ALREADY EXISTS (idempotent migration)
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS balance_safe_threshold NUMERIC(15, 2) DEFAULT 1000000.00;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS balance_warning_threshold NUMERIC(15, 2) DEFAULT 500000.00;
 
 
 -- 3. CREATE CATEGORIES TABLE

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { Category, Transaction, TransactionType, YearlyCashflowSummary, MonthlyCashflowItem } from '../types';
+import { Category, Transaction, TransactionType, YearlyCashflowSummary, MonthlyCashflowItem, BalanceThresholds } from '../types';
 import { INITIAL_CATEGORIES, getInitialDemoTransactions, DEFAULT_INCOME_CATEGORIES, DEFAULT_EXPENSE_CATEGORIES } from '../lib/defaultData';
 
 interface FinanceContextType {
@@ -16,6 +16,7 @@ interface FinanceContextType {
   thisMonthSavings: number;
   savingsRate: number;
   monthlySavingsTarget: number;
+  balanceThresholds: BalanceThresholds;
   thisMonthSavingsProgress: number;
   yearlySavingsTotal: number;
   yearlyTargetTotal: number;
@@ -23,6 +24,7 @@ interface FinanceContextType {
   availableYears: number[];
   getYearlySummary: (year: number) => YearlyCashflowSummary;
   updateSavingsTarget: (newTarget: number) => Promise<{ error: string | null }>;
+  updateBalanceThresholds: (thresholds: BalanceThresholds) => Promise<{ error: string | null }>;
   addCategory: (category: Omit<Category, 'id' | 'user_id'>) => Promise<{ error: string | null }>;
   updateCategory: (id: string, category: Partial<Category>) => Promise<{ error: string | null }>;
   deleteCategory: (id: string) => Promise<{ error: string | null }>;
@@ -35,12 +37,18 @@ interface FinanceContextType {
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
 
 const DEFAULT_SAVINGS_TARGET = 1500000; // Default Rp 1.500.000 / bulan
+const DEFAULT_BALANCE_SAFE = 1000000;    // > 1jt => happy
+const DEFAULT_BALANCE_WARNING = 500000;  // >= 500rb => neutral, below => sad
 
 export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isGuest } = useAuth();
   const [categories, setCategories] = useState<Category[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [monthlySavingsTarget, setMonthlySavingsTarget] = useState<number>(DEFAULT_SAVINGS_TARGET);
+  const [balanceThresholds, setBalanceThresholds] = useState<BalanceThresholds>({
+    safe: DEFAULT_BALANCE_SAFE,
+    warning: DEFAULT_BALANCE_WARNING,
+  });
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const configured = isSupabaseConfigured();
 
@@ -63,10 +71,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     if (configured && supabase && !isGuest) {
       try {
-        // 1. Fetch Profile & Savings Target
+        // 1. Fetch Profile & Savings Target + Thresholds
         const { data: profileData } = await supabase
           .from('profiles')
-          .select('monthly_savings_target')
+          .select('monthly_savings_target, balance_safe_threshold, balance_warning_threshold')
           .eq('id', user.id)
           .single();
 
@@ -79,6 +87,18 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
             setMonthlySavingsTarget(Number(savedTarget) || DEFAULT_SAVINGS_TARGET);
           } else {
             setMonthlySavingsTarget(DEFAULT_SAVINGS_TARGET);
+          }
+        }
+
+        // Load balance thresholds from profile or localStorage fallback
+        const safeVal = profileData?.balance_safe_threshold;
+        const warnVal = profileData?.balance_warning_threshold;
+        if (safeVal != null && warnVal != null) {
+          setBalanceThresholds({ safe: Number(safeVal), warning: Number(warnVal) });
+        } else {
+          const savedThresholds = localStorage.getItem(getStorageKey('balance_thresholds'));
+          if (savedThresholds) {
+            try { setBalanceThresholds(JSON.parse(savedThresholds)); } catch { /* ignore */ }
           }
         }
 
@@ -145,6 +165,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const catKey = getStorageKey('categories');
       const txKey = getStorageKey('transactions');
       const targetKey = getStorageKey('savings_target');
+      const thresholdsKey = getStorageKey('balance_thresholds');
 
       // Load savings target
       const savedTarget = localStorage.getItem(targetKey);
@@ -153,6 +174,16 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       } else {
         setMonthlySavingsTarget(DEFAULT_SAVINGS_TARGET);
         localStorage.setItem(targetKey, DEFAULT_SAVINGS_TARGET.toString());
+      }
+
+      // Load balance thresholds
+      const savedThresholds = localStorage.getItem(thresholdsKey);
+      if (savedThresholds) {
+        try { setBalanceThresholds(JSON.parse(savedThresholds)); } catch { /* ignore */ }
+      } else {
+        const defaultThresh = { safe: DEFAULT_BALANCE_SAFE, warning: DEFAULT_BALANCE_WARNING };
+        setBalanceThresholds(defaultThresh);
+        localStorage.setItem(thresholdsKey, JSON.stringify(defaultThresh));
       }
 
       // Load categories
@@ -249,8 +280,40 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           .eq('id', user.id);
 
         if (error) {
-          // If column doesn't exist yet, we still save in localStorage and don't break
           console.warn('Could not update monthly_savings_target in Supabase:', error.message);
+        }
+        return { error: null };
+      } catch (err: any) {
+        return { error: err.message };
+      }
+    }
+
+    return { error: null };
+  };
+
+  // BALANCE THRESHOLDS UPDATE
+  const updateBalanceThresholds = async (thresholds: BalanceThresholds): Promise<{ error: string | null }> => {
+    if (!user) return { error: 'Pengguna belum login' };
+    if (thresholds.safe <= 0 || thresholds.warning <= 0)
+      return { error: 'Batas saldo harus lebih dari 0' };
+    if (thresholds.warning >= thresholds.safe)
+      return { error: 'Batas waspada harus lebih kecil dari batas aman' };
+
+    setBalanceThresholds(thresholds);
+    localStorage.setItem(getStorageKey('balance_thresholds'), JSON.stringify(thresholds));
+
+    if (configured && supabase && !isGuest) {
+      try {
+        const { error } = await supabase
+          .from('profiles')
+          .update({
+            balance_safe_threshold: thresholds.safe,
+            balance_warning_threshold: thresholds.warning,
+          })
+          .eq('id', user.id);
+
+        if (error) {
+          console.warn('Could not update balance thresholds in Supabase:', error.message);
         }
         return { error: null };
       } catch (err: any) {
@@ -682,6 +745,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         thisMonthSavings,
         savingsRate,
         monthlySavingsTarget,
+        balanceThresholds,
         thisMonthSavingsProgress,
         yearlySavingsTotal,
         yearlyTargetTotal,
@@ -689,6 +753,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         availableYears,
         getYearlySummary,
         updateSavingsTarget,
+        updateBalanceThresholds,
         addCategory,
         updateCategory,
         deleteCategory,

@@ -5,6 +5,7 @@ import { MascotMood } from '../../types';
 import { formatRupiah } from '../../lib/formatters';
 import { Sparkles, AlertTriangle, Smile, Heart } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useFinance } from '../../context/FinanceContext';
 
 
 interface AnimatedMascotProps {
@@ -13,6 +14,7 @@ interface AnimatedMascotProps {
 
 export const AnimatedMascot: React.FC<AnimatedMascotProps> = ({ balance }) => {
   const { user } = useAuth();
+  const { balanceThresholds } = useFinance();
   const [petCount, setPetCount] = useState(0);
   const [customQuote, setCustomQuote] = useState<string | null>(null);
   const prevBalanceRef = useRef<number>(balance);
@@ -28,16 +30,28 @@ export const AnimatedMascot: React.FC<AnimatedMascotProps> = ({ balance }) => {
   const greeting = getTimeGreeting();
   const displayName = user?.full_name || user?.email?.split('@')[0] || 'Teman Keuangan';
 
-  // Determine mood based on user requirements:
-  // > 1.000.000 : Happy / Bahagia
-  // 500.000 - 1.000.000 : Neutral / Datar
-  // < 500.000 : Sad / Gelisah
-  const mood: MascotMood = balance > 1000000 ? 'happy' : balance >= 500000 ? 'neutral' : 'sad';
+  // Current date display
+  const now = new Date();
+  const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+  const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  const currentDayName = dayNames[now.getDay()];
+  const currentDate = now.getDate();
+  const currentMonth = monthNames[now.getMonth()];
+  const currentYear = now.getFullYear();
 
+  // Determine mood based on per-user thresholds
+  // > safe threshold : Happy / Bahagia
+  // >= warning threshold : Neutral / Datar
+  // < warning threshold : Sad / Gelisah
+  const mood: MascotMood = balance > balanceThresholds.safe
+    ? 'happy'
+    : balance >= balanceThresholds.warning
+    ? 'neutral'
+    : 'sad';
 
-  // Trigger celebratory confetti when balance crosses above 1.000.000
+  // Trigger celebratory confetti when balance crosses above safe threshold
   useEffect(() => {
-    if (prevBalanceRef.current <= 1000000 && balance > 1000000) {
+    if (prevBalanceRef.current <= balanceThresholds.safe && balance > balanceThresholds.safe) {
       try {
         confetti({
           particleCount: 80,
@@ -137,6 +151,21 @@ export const AnimatedMascot: React.FC<AnimatedMascotProps> = ({ balance }) => {
       <div className="relative z-10 flex flex-col md:flex-row items-center gap-6">
         {/* Animated Mascot Character Container */}
         <div className="relative flex-shrink-0 flex flex-col items-center">
+          {/* Date & Day Badge above Finny */}
+          <div className="mb-2 flex flex-col items-center gap-0.5">
+            <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+              {currentDayName}
+            </span>
+            <div className="flex items-baseline gap-1">
+              <span className="text-3xl font-black text-slate-800 dark:text-white leading-none">
+                {currentDate}
+              </span>
+              <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+                {currentMonth} {currentYear}
+              </span>
+            </div>
+          </div>
+
           <motion.div
             className="cursor-pointer select-none relative"
             onClick={handlePetMascot}
@@ -521,21 +550,29 @@ export const AnimatedMascot: React.FC<AnimatedMascotProps> = ({ balance }) => {
           {/* Progress / Mood indicator bar */}
           <div className="space-y-1">
             <div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-              <span className={balance < 500000 ? 'text-rose-500 font-bold' : ''}>Kritis (&lt;500rb)</span>
-              <span className={balance >= 500000 && balance <= 1000000 ? 'text-amber-500 font-bold' : ''}>Waspada (500rb - 1jt)</span>
-              <span className={balance > 1000000 ? 'text-emerald-500 font-bold' : ''}>Aman (&gt;1jt)</span>
+              <span className={balance < balanceThresholds.warning ? 'text-rose-500 font-bold' : ''}>
+                Kritis (&lt;{(balanceThresholds.warning / 1000).toFixed(0)}rb)
+              </span>
+              <span className={balance >= balanceThresholds.warning && balance <= balanceThresholds.safe ? 'text-amber-500 font-bold' : ''}>
+                Waspada
+              </span>
+              <span className={balance > balanceThresholds.safe ? 'text-emerald-500 font-bold' : ''}>
+                Aman (&gt;{balanceThresholds.safe >= 1000000
+                  ? `${(balanceThresholds.safe / 1000000).toFixed(balanceThresholds.safe % 1000000 === 0 ? 0 : 1)}jt`
+                  : `${(balanceThresholds.safe / 1000).toFixed(0)}rb`})
+              </span>
             </div>
             <div className="h-2 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex">
               <div
                 className="h-full bg-gradient-to-r from-rose-500 to-rose-600 transition-all duration-500"
-                style={{ width: `${Math.min(100, Math.max(0, (balance / 500000) * 33.3))}%` }}
+                style={{ width: `${Math.min(100, Math.max(0, (balance / balanceThresholds.warning) * 33.3))}%` }}
               />
               <div
                 className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 transition-all duration-500"
                 style={{
                   width: `${
-                    balance > 500000
-                      ? Math.min(33.3, ((balance - 500000) / 500000) * 33.3)
+                    balance > balanceThresholds.warning
+                      ? Math.min(33.3, ((balance - balanceThresholds.warning) / (balanceThresholds.safe - balanceThresholds.warning)) * 33.3)
                       : 0
                   }%`,
                 }}
@@ -544,8 +581,8 @@ export const AnimatedMascot: React.FC<AnimatedMascotProps> = ({ balance }) => {
                 className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-500"
                 style={{
                   width: `${
-                    balance > 1000000
-                      ? Math.min(33.4, ((balance - 1000000) / 2000000) * 33.4)
+                    balance > balanceThresholds.safe
+                      ? Math.min(33.4, ((balance - balanceThresholds.safe) / (balanceThresholds.safe * 2)) * 33.4)
                       : 0
                   }%`,
                 }}

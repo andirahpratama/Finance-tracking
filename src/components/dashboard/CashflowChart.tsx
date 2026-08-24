@@ -13,11 +13,12 @@ import {
   Legend,
   ReferenceLine,
 } from 'recharts';
-import { Transaction, ChartViewMode } from '../../types';
-import { formatCompactRupiah, formatRupiah, formatDateIndo } from '../../lib/formatters';
+import { Transaction } from '../../types';
+import { formatCompactRupiah } from '../../lib/formatters';
 import { useFinance } from '../../context/FinanceContext';
-import { Calendar, BarChart3, LineChart } from 'lucide-react';
+import { CalendarDays, BarChart3, ChevronLeft, ChevronRight } from 'lucide-react';
 
+type ChartTab = 'monthly' | 'yearly';
 
 interface CashflowChartProps {
   transactions: Transaction[];
@@ -26,425 +27,506 @@ interface CashflowChartProps {
 export const CashflowChart: React.FC<CashflowChartProps> = ({ transactions }) => {
   const { monthlySavingsTarget, availableYears, getYearlySummary } = useFinance();
   const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth(); // 0-indexed
 
-  const [viewMode, setViewMode] = useState<ChartViewMode>('monthly');
+  const [tab, setTab] = useState<ChartTab>('monthly');
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
+  const [selectedMonth, setSelectedMonth] = useState<number>(currentMonth);
 
-  // Daily Chart Data (Last 15 active days)
-  const dailyChartData = useMemo(() => {
-    if (!transactions.length) return [];
-    const sorted = [...transactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    const dateMap = new Map<string, { date: string; income: number; expense: number; net: number }>();
+  // ─── Monthly view: daily breakdown for the selected month ──────────────────
+  const monthlyChartData = useMemo(() => {
+    const year = selectedYear;
+    const month = selectedMonth;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-    sorted.forEach((t) => {
-      const existing = dateMap.get(t.date) || { date: t.date, income: 0, expense: 0, net: 0 };
-      const amt = Number(t.amount);
-      if (t.type === 'income') {
-        existing.income += amt;
-      } else {
-        existing.expense += amt;
+    const dayMap: Record<number, { income: number; expense: number }> = {};
+    for (let d = 1; d <= daysInMonth; d++) {
+      dayMap[d] = { income: 0, expense: 0 };
+    }
+
+    transactions.forEach((t) => {
+      const d = new Date(t.date);
+      if (d.getFullYear() === year && d.getMonth() === month) {
+        const day = d.getDate();
+        const amt = Number(t.amount);
+        if (t.type === 'income') dayMap[day].income += amt;
+        else dayMap[day].expense += amt;
       }
-      existing.net = existing.income - existing.expense;
-      dateMap.set(t.date, existing);
     });
 
-    const list = Array.from(dateMap.values());
-    return list.slice(-15);
-  }, [transactions]);
+    return Object.entries(dayMap).map(([day, vals]) => ({
+      label: day,
+      income: vals.income,
+      expense: vals.expense,
+      net: vals.income - vals.expense,
+    }));
+  }, [transactions, selectedYear, selectedMonth]);
 
-  // Yearly Summary for selected year
-  const yearlySummary = useMemo(() => {
-    return getYearlySummary(selectedYear);
+  // ─── Yearly view: 12-month breakdown for selected year ─────────────────────
+  const yearlyChartData = useMemo(() => {
+    return getYearlySummary(selectedYear).months.map((m) => ({
+      label: m.monthName,
+      fullLabel: m.fullMonthName,
+      income: m.income,
+      expense: m.expense,
+      net: m.net,
+      cumulativeSavings: m.cumulativeSavings,
+      targetSavings: m.targetSavings,
+      hasData: m.hasData,
+    }));
   }, [getYearlySummary, selectedYear]);
 
-  // Custom Tooltip for Daily Area Chart
-  const DailyTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      const inc = payload.find((p: any) => p.dataKey === 'income')?.value || 0;
-      const exp = payload.find((p: any) => p.dataKey === 'expense')?.value || 0;
-      const net = inc - exp;
+  // ─── Year-over-year comparison (for yearly summary cards) ──────────────────
+  const yearlySummary = useMemo(() => getYearlySummary(selectedYear), [getYearlySummary, selectedYear]);
 
-      return (
-        <div className="rounded-xl bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-700/80 p-3.5 shadow-2xl backdrop-blur-md transition-colors duration-200">
-          <p className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">{formatDateIndo(label)}</p>
-          <div className="space-y-1.5 text-xs">
-            <div className="flex items-center justify-between gap-4">
-              <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                Pemasukan:
-              </span>
-              <span className="font-bold text-slate-900 dark:text-white">{formatRupiah(inc)}</span>
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <span className="flex items-center gap-1.5 text-rose-600 dark:text-rose-400 font-medium">
-                <span className="w-2 h-2 rounded-full bg-rose-500" />
-                Pengeluaran:
-              </span>
-              <span className="font-bold text-slate-900 dark:text-white">{formatRupiah(exp)}</span>
-            </div>
-            <div className="border-t border-slate-100 dark:border-slate-800 pt-1 flex items-center justify-between gap-4">
-              <span className="text-slate-500 dark:text-slate-400">Tabungan Bersih:</span>
-              <span className={`font-bold ${net >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                {formatRupiah(net)}
-              </span>
-            </div>
-          </div>
-        </div>
-      );
-    }
-    return null;
+  const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  const monthShort = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+
+  // Navigation helpers
+  const prevMonth = () => {
+    if (selectedMonth === 0) { setSelectedMonth(11); setSelectedYear(y => y - 1); }
+    else setSelectedMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    const now = new Date();
+    if (selectedYear === now.getFullYear() && selectedMonth === now.getMonth()) return;
+    if (selectedMonth === 11) { setSelectedMonth(0); setSelectedYear(y => y + 1); }
+    else setSelectedMonth(m => m + 1);
+  };
+  const prevYear = () => setSelectedYear(y => y - 1);
+  const nextYear = () => {
+    if (selectedYear >= currentYear) return;
+    setSelectedYear(y => y + 1);
   };
 
-  // Custom Tooltip for Monthly 12-Month Chart
-  const MonthlyTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div className="rounded-xl bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-700/80 p-3.5 shadow-2xl backdrop-blur-md transition-colors duration-200 min-w-[200px]">
-          <p className="text-xs font-bold text-slate-900 dark:text-white mb-2">{data.fullMonthName}</p>
-          <div className="space-y-1.5 text-xs">
-            <div className="flex items-center justify-between gap-4">
-              <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                Pemasukan:
-              </span>
-              <span className="font-bold text-slate-900 dark:text-white">{formatRupiah(data.income)}</span>
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <span className="flex items-center gap-1.5 text-rose-600 dark:text-rose-400 font-medium">
-                <span className="w-2 h-2 rounded-full bg-rose-500" />
-                Pengeluaran:
-              </span>
-              <span className="font-bold text-slate-900 dark:text-white">{formatRupiah(data.expense)}</span>
-            </div>
-            <div className="border-t border-slate-100 dark:border-slate-800 pt-1 flex items-center justify-between gap-4">
-              <span className="text-slate-500 dark:text-slate-400 font-medium">Tabungan Bersih:</span>
-              <span className={`font-bold ${data.net >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                {formatRupiah(data.net)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-4 text-[11px] text-slate-400">
-              <span>Target Bulanan:</span>
-              <span className="font-medium text-slate-600 dark:text-slate-300">{formatRupiah(monthlySavingsTarget)}</span>
-            </div>
+  const isCurrentMonthOrFuture = selectedYear === new Date().getFullYear() && selectedMonth === new Date().getMonth();
+  const isCurrentYear = selectedYear >= currentYear;
+
+  // ─── Tooltips ──────────────────────────────────────────────────────────────
+  const MonthlyTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    const inc = payload.find((p: any) => p.dataKey === 'income')?.value || 0;
+    const exp = payload.find((p: any) => p.dataKey === 'expense')?.value || 0;
+    const net = inc - exp;
+    return (
+      <div className="rounded-xl bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-700/80 p-3.5 shadow-2xl backdrop-blur-sm min-w-[180px]">
+        <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">
+          {monthShort[selectedMonth]} {label}, {selectedYear}
+        </p>
+        <div className="space-y-1.5">
+          <div className="flex justify-between items-center gap-4">
+            <span className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />Pemasukan
+            </span>
+            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">{formatCompactRupiah(inc)}</span>
+          </div>
+          <div className="flex justify-between items-center gap-4">
+            <span className="flex items-center gap-1.5 text-xs text-rose-600 dark:text-rose-400 font-medium">
+              <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />Pengeluaran
+            </span>
+            <span className="text-xs font-bold text-rose-600 dark:text-rose-400">{formatCompactRupiah(exp)}</span>
+          </div>
+          <div className="border-t border-slate-200 dark:border-slate-700 pt-1.5 flex justify-between items-center gap-4">
+            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Net</span>
+            <span className={`text-xs font-bold ${net >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-rose-600 dark:text-rose-400'}`}>
+              {net < 0 ? '-' : '+'}{formatCompactRupiah(Math.abs(net))}
+            </span>
           </div>
         </div>
-      );
-    }
-    return null;
+      </div>
+    );
   };
 
-  // Custom Tooltip for Yearly Cumulative Savings Chart
-  const CumulativeTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      const targetDiff = data.cumulativeSavings - data.targetSavings;
-      const isSurplus = targetDiff >= 0;
-
-      return (
-        <div className="rounded-xl bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-700/80 p-3.5 shadow-2xl backdrop-blur-md transition-colors duration-200 min-w-[220px]">
-          <p className="text-xs font-bold text-slate-900 dark:text-white mb-2">{data.fullMonthName}</p>
-          <div className="space-y-1.5 text-xs">
-            <div className="flex items-center justify-between gap-4">
-              <span className="flex items-center gap-1.5 text-teal-600 dark:text-teal-400 font-medium">
-                <span className="w-2 h-2 rounded-full bg-teal-500" />
-                Tabungan Bulan Ini:
-              </span>
-              <span className="font-bold text-slate-900 dark:text-white">{formatRupiah(data.net)}</span>
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                Total Terkumpul:
-              </span>
-              <span className="font-extrabold text-slate-900 dark:text-white">{formatRupiah(data.cumulativeSavings)}</span>
-            </div>
-            <div className="flex items-center justify-between gap-4 text-amber-600 dark:text-amber-400">
-              <span className="flex items-center gap-1.5 font-medium">
-                <span className="w-2 h-2 rounded-full bg-amber-500" />
-                Target Akumulasi:
-              </span>
-              <span className="font-bold">{formatRupiah(data.targetSavings)}</span>
-            </div>
-            <div className="border-t border-slate-100 dark:border-slate-800 pt-1 flex items-center justify-between gap-4">
-              <span className="text-slate-500 dark:text-slate-400">Status Target:</span>
-              <span className={`font-bold ${isSurplus ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                {isSurplus ? `+${formatRupiah(targetDiff)}` : formatRupiah(targetDiff)}
-              </span>
-            </div>
+  const YearlyTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    const inc = payload.find((p: any) => p.dataKey === 'income')?.value || 0;
+    const exp = payload.find((p: any) => p.dataKey === 'expense')?.value || 0;
+    const net = inc - exp;
+    const cumSav = payload.find((p: any) => p.dataKey === 'cumulativeSavings')?.value || 0;
+    const tgtSav = payload.find((p: any) => p.dataKey === 'targetSavings')?.value || 0;
+    return (
+      <div className="rounded-xl bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-700/80 p-3.5 shadow-2xl backdrop-blur-sm min-w-[200px]">
+        <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">{label} {selectedYear}</p>
+        <div className="space-y-1.5">
+          <div className="flex justify-between gap-4">
+            <span className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />Pemasukan
+            </span>
+            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">{formatCompactRupiah(inc)}</span>
+          </div>
+          <div className="flex justify-between gap-4">
+            <span className="flex items-center gap-1.5 text-xs text-rose-600 dark:text-rose-400 font-medium">
+              <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />Pengeluaran
+            </span>
+            <span className="text-xs font-bold text-rose-600 dark:text-rose-400">{formatCompactRupiah(exp)}</span>
+          </div>
+          <div className="border-t border-slate-200 dark:border-slate-700 pt-1.5 flex justify-between gap-4">
+            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Net Bulan Ini</span>
+            <span className={`text-xs font-bold ${net >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-rose-600 dark:text-rose-400'}`}>
+              {net < 0 ? '-' : '+'}{formatCompactRupiah(Math.abs(net))}
+            </span>
+          </div>
+          <div className="flex justify-between gap-4">
+            <span className="flex items-center gap-1.5 text-xs text-cyan-600 dark:text-cyan-400 font-medium">
+              <span className="w-2 h-2 rounded-full bg-cyan-500 inline-block" />Akumulasi
+            </span>
+            <span className="text-xs font-bold text-cyan-600 dark:text-cyan-400">{formatCompactRupiah(cumSav)}</span>
+          </div>
+          <div className="flex justify-between gap-4">
+            <span className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-medium">
+              <span className="w-2 h-2 rounded-full border-2 border-dashed border-amber-500 inline-block" />Target
+            </span>
+            <span className="text-xs font-bold text-amber-600 dark:text-amber-400">{formatCompactRupiah(tgtSav)}</span>
           </div>
         </div>
-      );
-    }
-    return null;
+      </div>
+    );
   };
+
+  const hasMonthlyData = monthlyChartData.some(d => d.income > 0 || d.expense > 0);
+  const hasYearlyData = yearlyChartData.some(d => d.hasData);
 
   return (
-    <div className="space-y-4">
-      {/* View Mode Controls & Year Selector Header */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        {/* View Mode Tabs */}
-        <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-xs overflow-x-auto">
-          <button
-            onClick={() => setViewMode('monthly')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all ${
-              viewMode === 'monthly'
-                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm font-bold'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <BarChart3 className="w-3.5 h-3.5 text-emerald-500" />
-            Bulanan (1 Tahun)
-          </button>
-          <button
-            onClick={() => setViewMode('yearly')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all ${
-              viewMode === 'yearly'
-                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm font-bold'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <LineChart className="w-3.5 h-3.5 text-cyan-500" />
-            Akumulasi Tabungan 1 Th
-          </button>
-          <button
-            onClick={() => setViewMode('daily')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all ${
-              viewMode === 'daily'
-                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm font-bold'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <Calendar className="w-3.5 h-3.5 text-teal-500" />
-            Harian (15 Hari)
-          </button>
+    <div className="rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 overflow-hidden shadow-sm dark:shadow-xl backdrop-blur-xl">
+      {/* Header */}
+      <div className="px-5 pt-5 pb-4 border-b border-slate-100 dark:border-slate-800/60">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Grafik Arus Kas</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Visualisasi pemasukan & pengeluaran</p>
+          </div>
+
+          {/* Tab Switcher */}
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800/80 rounded-xl p-1 gap-1 self-start sm:self-auto">
+            <button
+              onClick={() => setTab('monthly')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                tab === 'monthly'
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+              }`}
+            >
+              <CalendarDays className="w-3.5 h-3.5" />
+              Bulanan
+            </button>
+            <button
+              onClick={() => setTab('yearly')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                tab === 'yearly'
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+              }`}
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              Tahunan
+            </button>
+          </div>
         </div>
 
-        {/* Year Selector (visible for monthly & yearly modes) */}
-        {viewMode !== 'daily' && (
-          <div className="flex items-center gap-2 self-end sm:self-auto">
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Tahun:</span>
-            <select
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(Number(e.target.value))}
-              className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
-            >
-              {availableYears.map((yr) => (
-                <option key={yr} value={yr}>
-                  {yr}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+        {/* Period Navigator */}
+        <div className="mt-3 flex items-center justify-between">
+          {tab === 'monthly' ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={prevMonth}
+                className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-sm font-bold text-slate-900 dark:text-white min-w-[160px] text-center">
+                {monthNames[selectedMonth]} {selectedYear}
+              </span>
+              <button
+                onClick={nextMonth}
+                disabled={isCurrentMonthOrFuture}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  isCurrentMonthOrFuture
+                    ? 'opacity-30 cursor-not-allowed'
+                    : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400'
+                }`}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+              {/* Month quick-select */}
+              <div className="hidden sm:flex items-center gap-1 ml-2">
+                {monthShort.map((m, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setSelectedMonth(i)}
+                    className={`px-2 py-0.5 rounded-md text-[11px] font-semibold transition-all ${
+                      i === selectedMonth
+                        ? 'bg-emerald-500 text-white'
+                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={prevYear}
+                className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-sm font-bold text-slate-900 dark:text-white min-w-[60px] text-center">
+                {selectedYear}
+              </span>
+              <button
+                onClick={nextYear}
+                disabled={isCurrentYear}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  isCurrentYear
+                    ? 'opacity-30 cursor-not-allowed'
+                    : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400'
+                }`}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+              {/* Year quick-select pills */}
+              <div className="flex items-center gap-1 ml-2 flex-wrap">
+                {availableYears.map((y) => (
+                  <button
+                    key={y}
+                    onClick={() => setSelectedYear(y)}
+                    className={`px-2.5 py-0.5 rounded-md text-[11px] font-semibold transition-all ${
+                      y === selectedYear
+                        ? 'bg-emerald-500 text-white'
+                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    {y}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Mini Summary Cards for Selected Year in Monthly / Yearly Mode */}
-      {viewMode !== 'daily' && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 text-xs">
-          <div>
-            <span className="text-slate-400 dark:text-slate-500 block text-[10px] uppercase font-semibold">Pemasukan {selectedYear}</span>
-            <span className="font-extrabold text-emerald-600 dark:text-emerald-400 text-sm">
-              {formatRupiah(yearlySummary.totalIncome)}
-            </span>
-          </div>
-          <div>
-            <span className="text-slate-400 dark:text-slate-500 block text-[10px] uppercase font-semibold">Pengeluaran {selectedYear}</span>
-            <span className="font-extrabold text-rose-600 dark:text-rose-400 text-sm">
-              {formatRupiah(yearlySummary.totalExpense)}
-            </span>
-          </div>
-          <div>
-            <span className="text-slate-400 dark:text-slate-500 block text-[10px] uppercase font-semibold">Total Tabungan {selectedYear}</span>
-            <span className={`font-extrabold text-sm ${yearlySummary.totalSavings >= 0 ? 'text-teal-600 dark:text-teal-400' : 'text-rose-600 dark:text-rose-400'}`}>
-              {formatRupiah(yearlySummary.totalSavings)}
-            </span>
-          </div>
-          <div>
-            <span className="text-slate-400 dark:text-slate-500 block text-[10px] uppercase font-semibold">Target Tahunan</span>
-            <span className="font-bold text-amber-600 dark:text-amber-400 text-sm">
-              {yearlySummary.targetAchievementRate}% Tercapai
-            </span>
-          </div>
+      {/* ── MONTHLY CHART ── */}
+      {tab === 'monthly' && (
+        <div className="p-5">
+          {!hasMonthlyData ? (
+            <div className="flex flex-col items-center justify-center h-48 gap-3">
+              <CalendarDays className="w-10 h-10 text-slate-300 dark:text-slate-600" />
+              <p className="text-sm text-slate-400 dark:text-slate-500">Belum ada transaksi di bulan ini</p>
+            </div>
+          ) : (
+            <>
+              {/* Summary pills */}
+              <div className="grid grid-cols-3 gap-3 mb-5">
+                {[
+                  { label: 'Total Pemasukan', val: monthlyChartData.reduce((s, d) => s + d.income, 0), color: 'emerald' },
+                  { label: 'Total Pengeluaran', val: monthlyChartData.reduce((s, d) => s + d.expense, 0), color: 'rose' },
+                  {
+                    label: 'Selisih Bersih',
+                    val: monthlyChartData.reduce((s, d) => s + d.net, 0),
+                    color: monthlyChartData.reduce((s, d) => s + d.net, 0) >= 0 ? 'blue' : 'rose',
+                  },
+                ].map((item) => (
+                  <div
+                    key={item.label}
+                    className={`rounded-xl p-3 bg-${item.color}-50 dark:bg-${item.color}-500/10 border border-${item.color}-200 dark:border-${item.color}-500/20`}
+                  >
+                    <p className={`text-[10px] font-semibold uppercase tracking-wide text-${item.color}-600 dark:text-${item.color}-400 mb-1`}>
+                      {item.label}
+                    </p>
+                    <p className={`text-sm font-extrabold text-${item.color}-700 dark:text-${item.color}-300`}>
+                      {formatCompactRupiah(Math.abs(item.val))}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={monthlyChartData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }} barGap={2}>
+                  <defs>
+                    <linearGradient id="incGradM" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#10B981" stopOpacity={0.9} />
+                      <stop offset="100%" stopColor="#34D399" stopOpacity={0.7} />
+                    </linearGradient>
+                    <linearGradient id="expGradM" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#F43F5E" stopOpacity={0.9} />
+                      <stop offset="100%" stopColor="#FB7185" stopOpacity={0.7} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-slate-200 dark:text-slate-700/50" vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fontSize: 10, fill: 'currentColor' }}
+                    className="text-slate-500 dark:text-slate-400"
+                    axisLine={false}
+                    tickLine={false}
+                    interval={2}
+                    tickFormatter={(v) => `${v}`}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10, fill: 'currentColor' }}
+                    className="text-slate-500 dark:text-slate-400"
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={formatCompactRupiah}
+                    width={60}
+                  />
+                  <Tooltip content={<MonthlyTooltip />} />
+                  <ReferenceLine y={0} stroke="currentColor" className="text-slate-300 dark:text-slate-600" />
+                  <Bar dataKey="income" name="Pemasukan" fill="url(#incGradM)" radius={[3, 3, 0, 0]} maxBarSize={16} />
+                  <Bar dataKey="expense" name="Pengeluaran" fill="url(#expGradM)" radius={[3, 3, 0, 0]} maxBarSize={16} />
+                  <Legend
+                    wrapperStyle={{ fontSize: '11px', paddingTop: '12px' }}
+                    formatter={(value) => value === 'income' ? 'Pemasukan' : 'Pengeluaran'}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </>
+          )}
         </div>
       )}
 
-      {/* Main Chart Canvas */}
-      <div className="w-full h-72 sm:h-80">
-        {/* 1. DAILY AREA VIEW */}
-        {viewMode === 'daily' && (
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={dailyChartData} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
-              <defs>
-                <linearGradient id="incomeGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10B981" stopOpacity={0.4} />
-                  <stop offset="95%" stopColor="#10B981" stopOpacity={0.0} />
-                </linearGradient>
-                <linearGradient id="expenseGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#F43F5E" stopOpacity={0.4} />
-                  <stop offset="95%" stopColor="#F43F5E" stopOpacity={0.0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.25} />
-              <XAxis
-                dataKey="date"
-                tickFormatter={(str) => {
-                  const d = new Date(str);
-                  return `${d.getDate()}/${d.getMonth() + 1}`;
-                }}
-                stroke="#64748B"
-                fontSize={11}
-                tickLine={false}
-              />
-              <YAxis
-                tickFormatter={(num) => formatCompactRupiah(num)}
-                stroke="#64748B"
-                fontSize={11}
-                tickLine={false}
-              />
-              <Tooltip content={<DailyTooltip />} />
-              <Legend
-                verticalAlign="top"
-                align="right"
-                iconType="circle"
-                wrapperStyle={{ paddingBottom: '10px', fontSize: '11px' }}
-                formatter={(value) => (value === 'income' ? 'Pemasukan' : 'Pengeluaran')}
-              />
-              <Area
-                type="monotone"
-                dataKey="income"
-                name="income"
-                stroke="#10B981"
-                strokeWidth={2.5}
-                fillOpacity={1}
-                fill="url(#incomeGrad)"
-              />
-              <Area
-                type="monotone"
-                dataKey="expense"
-                name="expense"
-                stroke="#F43F5E"
-                strokeWidth={2.5}
-                fillOpacity={1}
-                fill="url(#expenseGrad)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        )}
+      {/* ── YEARLY CHART ── */}
+      {tab === 'yearly' && (
+        <div className="p-5">
+          {/* Yearly KPI summary */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+            {[
+              { label: 'Total Pemasukan', val: yearlySummary.totalIncome, color: 'emerald' },
+              { label: 'Total Pengeluaran', val: yearlySummary.totalExpense, color: 'rose' },
+              { label: 'Total Tabungan', val: yearlySummary.totalSavings, color: yearlySummary.totalSavings >= 0 ? 'blue' : 'rose' },
+              { label: 'Capai Target', val: null, pct: yearlySummary.targetAchievementRate, color: yearlySummary.targetAchievementRate >= 100 ? 'emerald' : yearlySummary.targetAchievementRate >= 50 ? 'amber' : 'rose' },
+            ].map((item) => (
+              <div
+                key={item.label}
+                className={`rounded-xl p-3 bg-${item.color}-50 dark:bg-${item.color}-500/10 border border-${item.color}-200 dark:border-${item.color}-500/20`}
+              >
+                <p className={`text-[10px] font-semibold uppercase tracking-wide text-${item.color}-600 dark:text-${item.color}-400 mb-1`}>
+                  {item.label}
+                </p>
+                {item.val !== null ? (
+                  <p className={`text-sm font-extrabold text-${item.color}-700 dark:text-${item.color}-300`}>
+                    {formatCompactRupiah(Math.abs(item.val ?? 0))}
+                  </p>
+                ) : (
+                  <p className={`text-sm font-extrabold text-${item.color}-700 dark:text-${item.color}-300`}>
+                    {item.pct}%
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
 
-        {/* 2. MONTHLY 12-MONTH BAR/LINE VIEW */}
-        {viewMode === 'monthly' && (
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={yearlySummary.months} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.25} />
-              <XAxis
-                dataKey="monthName"
-                stroke="#64748B"
-                fontSize={11}
-                tickLine={false}
-              />
-              <YAxis
-                tickFormatter={(num) => formatCompactRupiah(num)}
-                stroke="#64748B"
-                fontSize={11}
-                tickLine={false}
-              />
-              <Tooltip content={<MonthlyTooltip />} />
-              <Legend
-                verticalAlign="top"
-                align="right"
-                iconType="circle"
-                wrapperStyle={{ paddingBottom: '10px', fontSize: '11px' }}
-                formatter={(value) => {
-                  if (value === 'income') return 'Pemasukan';
-                  if (value === 'expense') return 'Pengeluaran';
-                  if (value === 'net') return 'Tabungan Bersih';
-                  return value;
-                }}
-              />
-              <ReferenceLine
-                y={monthlySavingsTarget}
-                stroke="#F59E0B"
-                strokeDasharray="4 4"
-                label={{
-                  value: 'Target Bulanan',
-                  position: 'insideTopRight',
-                  fill: '#F59E0B',
-                  fontSize: 10,
-                }}
-              />
-              <Bar dataKey="income" name="income" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={20} />
-              <Bar dataKey="expense" name="expense" fill="#F43F5E" radius={[4, 4, 0, 0]} maxBarSize={20} />
-              <Line
-                type="monotone"
-                dataKey="net"
-                name="net"
-                stroke="#06B6D4"
-                strokeWidth={2.5}
-                dot={{ r: 3, fill: '#06B6D4' }}
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        )}
+          {!hasYearlyData ? (
+            <div className="flex flex-col items-center justify-center h-48 gap-3">
+              <BarChart3 className="w-10 h-10 text-slate-300 dark:text-slate-600" />
+              <p className="text-sm text-slate-400 dark:text-slate-500">Belum ada data untuk tahun {selectedYear}</p>
+            </div>
+          ) : (
+            <>
+              {/* Bar chart: income vs expense per month */}
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">Pemasukan vs Pengeluaran per Bulan</p>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={yearlyChartData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }} barGap={2}>
+                  <defs>
+                    <linearGradient id="incGradY" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#10B981" stopOpacity={0.9} />
+                      <stop offset="100%" stopColor="#34D399" stopOpacity={0.7} />
+                    </linearGradient>
+                    <linearGradient id="expGradY" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#F43F5E" stopOpacity={0.9} />
+                      <stop offset="100%" stopColor="#FB7185" stopOpacity={0.7} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-slate-200 dark:text-slate-700/50" vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fontSize: 10, fill: 'currentColor' }}
+                    className="text-slate-500 dark:text-slate-400"
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10, fill: 'currentColor' }}
+                    className="text-slate-500 dark:text-slate-400"
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={formatCompactRupiah}
+                    width={60}
+                  />
+                  <Tooltip content={<YearlyTooltip />} />
+                  <Bar dataKey="income" name="Pemasukan" fill="url(#incGradY)" radius={[3, 3, 0, 0]} maxBarSize={20} />
+                  <Bar dataKey="expense" name="Pengeluaran" fill="url(#expGradY)" radius={[3, 3, 0, 0]} maxBarSize={20} />
+                  <Legend
+                    wrapperStyle={{ fontSize: '11px', paddingTop: '12px' }}
+                    formatter={(value) => value === 'income' ? 'Pemasukan' : 'Pengeluaran'}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
 
-        {/* 3. YEARLY CUMULATIVE SAVINGS VIEW */}
-        {viewMode === 'yearly' && (
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={yearlySummary.months} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
-              <defs>
-                <linearGradient id="cumSavingsGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#06B6D4" stopOpacity={0.4} />
-                  <stop offset="95%" stopColor="#06B6D4" stopOpacity={0.0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.25} />
-              <XAxis
-                dataKey="monthName"
-                stroke="#64748B"
-                fontSize={11}
-                tickLine={false}
-              />
-              <YAxis
-                tickFormatter={(num) => formatCompactRupiah(num)}
-                stroke="#64748B"
-                fontSize={11}
-                tickLine={false}
-              />
-              <Tooltip content={<CumulativeTooltip />} />
-              <Legend
-                verticalAlign="top"
-                align="right"
-                iconType="circle"
-                wrapperStyle={{ paddingBottom: '10px', fontSize: '11px' }}
-                formatter={(value) => {
-                  if (value === 'cumulativeSavings') return 'Akumulasi Tabungan Terkumpul';
-                  if (value === 'targetSavings') return 'Garis Target Tahunan';
-                  return value;
-                }}
-              />
-              <Area
-                type="monotone"
-                dataKey="cumulativeSavings"
-                name="cumulativeSavings"
-                stroke="#06B6D4"
-                strokeWidth={3}
-                fillOpacity={1}
-                fill="url(#cumSavingsGrad)"
-                dot={{ r: 3.5, fill: '#06B6D4' }}
-              />
-              <Line
-                type="monotone"
-                dataKey="targetSavings"
-                name="targetSavings"
-                stroke="#F59E0B"
-                strokeWidth={2}
-                strokeDasharray="5 5"
-                dot={{ r: 2.5, fill: '#F59E0B' }}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        )}
-      </div>
+              {/* Area chart: cumulative savings vs target */}
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-5 mb-2">Akumulasi Tabungan vs Target</p>
+              <ResponsiveContainer width="100%" height={200}>
+                <AreaChart data={yearlyChartData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+                  <defs>
+                    <linearGradient id="cumSavingsGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#06B6D4" stopOpacity={0.35} />
+                      <stop offset="100%" stopColor="#06B6D4" stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-slate-200 dark:text-slate-700/50" vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fontSize: 10, fill: 'currentColor' }}
+                    className="text-slate-500 dark:text-slate-400"
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10, fill: 'currentColor' }}
+                    className="text-slate-500 dark:text-slate-400"
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={formatCompactRupiah}
+                    width={60}
+                  />
+                  <Tooltip content={<YearlyTooltip />} />
+                  <ReferenceLine y={monthlySavingsTarget * 12} stroke="#F59E0B" strokeDasharray="5 5" strokeWidth={1.5} />
+                  <Legend
+                    wrapperStyle={{ fontSize: '11px', paddingTop: '12px' }}
+                    formatter={(value) => {
+                      if (value === 'cumulativeSavings') return 'Akumulasi Tabungan';
+                      if (value === 'targetSavings') return 'Target Tahunan';
+                      return value;
+                    }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="cumulativeSavings"
+                    name="cumulativeSavings"
+                    stroke="#06B6D4"
+                    strokeWidth={3}
+                    fillOpacity={1}
+                    fill="url(#cumSavingsGrad)"
+                    dot={{ r: 3.5, fill: '#06B6D4' }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="targetSavings"
+                    name="targetSavings"
+                    stroke="#F59E0B"
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    dot={{ r: 2.5, fill: '#F59E0B' }}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 };
