@@ -14,8 +14,9 @@ import { TransactionList } from './components/transactions/TransactionList';
 import { TransactionFilter } from './components/transactions/TransactionFilter';
 import { TransactionModal } from './components/transactions/TransactionModal';
 import { CategoryManagerModal } from './components/categories/CategoryManagerModal';
+import { PrintReportModal } from './components/reports/PrintReportModal';
 import { AuthModal } from './components/auth/AuthModal';
-import { exportTransactionsToCSV, printFinancialReport } from './lib/exportUtils';
+import { exportTransactionsToCSV } from './lib/exportUtils';
 import { FilterOptions, Transaction, TransactionType } from './types';
 import {
   Wallet,
@@ -43,16 +44,16 @@ export const App: React.FC = () => {
     deleteTransaction,
   } = useFinance();
 
-  // Active Tab state ('home' | 'rekap' | 'history' | 'tabungan')
   const [activeTab, setActiveTab] = useState<TabType>('home');
 
   // Modals state
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
-  const [transactionModalType, setTransactionModalType] = useState<TransactionType>('expense');
+  const [transactionModalType, setTransactionModalType] = useState<TransactionType | 'savings'>('expense');
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isSavingsTargetModalOpen, setIsSavingsTargetModalOpen] = useState(false);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
   // Filters state
   const [filters, setFilters] = useState<FilterOptions>({
@@ -62,10 +63,8 @@ export const App: React.FC = () => {
     period: 'all',
   });
 
-  // Filtered transactions calculation
   const filteredTransactions = useMemo(() => {
     return transactions.filter((t) => {
-      // Search term filter (notes or category name)
       if (filters.searchTerm.trim()) {
         const query = filters.searchTerm.toLowerCase();
         const matchNotes = (t.notes || '').toLowerCase().includes(query);
@@ -73,17 +72,14 @@ export const App: React.FC = () => {
         if (!matchNotes && !matchCategory) return false;
       }
 
-      // Type filter
       if (filters.type !== 'all' && t.type !== filters.type) {
         return false;
       }
 
-      // Category filter
       if (filters.categoryId && t.category_id !== filters.categoryId) {
         return false;
       }
 
-      // Period filter
       if (filters.period !== 'all') {
         const txDate = new Date(t.date);
         const now = new Date();
@@ -127,29 +123,24 @@ export const App: React.FC = () => {
     setIsTransactionModalOpen(true);
   };
 
+  const handleOpenSavings = () => {
+    setEditingTransaction(null);
+    setTransactionModalType('savings');
+    setIsTransactionModalOpen(true);
+  };
+
   const handleEditTransaction = (tx: Transaction) => {
     setEditingTransaction(tx);
     setTransactionModalType(tx.type);
     setIsTransactionModalOpen(true);
   };
 
-  // Export handlers
   const handleExportCSV = () => {
     exportTransactionsToCSV(filteredTransactions, `finance-tracking-${new Date().toISOString().split('T')[0]}.csv`);
   };
 
   const handlePrintReport = () => {
-    const currentMonthName = new Intl.DateTimeFormat('id-ID', {
-      month: 'long',
-      year: 'numeric',
-    }).format(new Date());
-
-    printFinancialReport(filteredTransactions, {
-      totalIncome,
-      totalExpense,
-      totalBalance,
-      monthName: currentMonthName,
-    });
+    setIsPrintModalOpen(true);
   };
 
   if (authLoading || financeLoading) {
@@ -172,6 +163,7 @@ export const App: React.FC = () => {
         onSelectTab={setActiveTab}
         onOpenIncomeModal={handleOpenIncome}
         onOpenExpenseModal={handleOpenExpense}
+        onOpenSavingsModal={handleOpenSavings}
         onOpenCategoryManager={() => setIsCategoryModalOpen(true)}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
         onOpenSavingsTargetModal={() => setIsSavingsTargetModalOpen(true)}
@@ -304,7 +296,6 @@ export const App: React.FC = () => {
         {/* ================= 3. HISTORY TAB (CATATAN ARUS KAS) ================= */}
         {activeTab === 'history' && (
           <div className="space-y-6 animate-in fade-in duration-300">
-            {/* Transactions List & Filter Section */}
             <div className="rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 p-4 sm:p-5 backdrop-blur-xl shadow-sm dark:shadow-xl space-y-4 sm:space-y-5 transition-colors duration-200">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
                 <div className="flex items-center gap-2.5">
@@ -354,8 +345,8 @@ export const App: React.FC = () => {
           <div className="space-y-6 animate-in fade-in duration-300">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">Target & Progres Tabungan</h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Pantau komitmen menabung bulanan & tahunan keluarga Anda</p>
+                <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">Target & Pos Tabungan Keluarga</h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Kelola pos tabungan liburan, pendidikan, dana darurat, dan pensiun</p>
               </div>
             </div>
 
@@ -372,6 +363,7 @@ export const App: React.FC = () => {
         onSelectTab={setActiveTab}
         onOpenExpenseModal={handleOpenExpense}
         onOpenIncomeModal={handleOpenIncome}
+        onOpenSavingsModal={handleOpenSavings}
         onOpenCategoryManager={() => setIsCategoryModalOpen(true)}
       />
 
@@ -395,6 +387,11 @@ export const App: React.FC = () => {
       <SavingsTargetModal
         isOpen={isSavingsTargetModalOpen}
         onClose={() => setIsSavingsTargetModalOpen(false)}
+      />
+
+      <PrintReportModal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
       />
 
       <AuthModal

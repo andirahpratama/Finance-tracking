@@ -106,3 +106,25 @@ export interface CategorySummary {
   percentage: number;
 }
 
+export interface SavingsTargetItem {
+  id: string;
+  user_id?: string;
+  name: string;
+  target_amount: number; // Target per bulan
+  current_amount: number; // Jumlah yang sudah terkumpul saat ini
+  target_date?: string;
+  category_icon?: string;
+  color?: string;
+  is_default_preset?: boolean;
+  created_at?: string;
+}
+
+export type InputModalTab = 'expense' | 'income' | 'savings';
+export type SavingsActionType = 'deposit' | 'withdraw';
+
+export interface PrintReportOptions {
+  periodType: 'this_month' | 'specific_month' | 'yearly';
+  year: number;
+  monthIndex?: number; // 0-11
+}
+

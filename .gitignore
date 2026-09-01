@@ -30,3 +30,5 @@ dist-ssr
 API KEY SUPABASE.txt
 *.txt
 
+
+.vercel

@@ -8,7 +8,7 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Tags,
-  X
+  X,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -19,6 +19,7 @@ interface MobileBottomNavProps {
   onSelectTab: (tab: TabType) => void;
   onOpenExpenseModal: () => void;
   onOpenIncomeModal: () => void;
+  onOpenSavingsModal?: () => void;
   onOpenCategoryManager: () => void;
 }
 
@@ -27,6 +28,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   onSelectTab,
   onOpenExpenseModal,
   onOpenIncomeModal,
+  onOpenSavingsModal,
   onOpenCategoryManager,
 }) => {
   const [showInputMenu, setShowInputMenu] = useState(false);
@@ -105,19 +107,37 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                 </div>
               </button>
 
+              {onOpenSavingsModal && (
+                <button
+                  onClick={() => {
+                    setShowInputMenu(false);
+                    onOpenSavingsModal();
+                  }}
+                  className="w-full flex items-center gap-3 p-3 rounded-2xl bg-cyan-50 dark:bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-100 dark:hover:bg-cyan-500/20 transition-all text-left font-bold text-xs border border-cyan-500/20 shadow-sm"
+                >
+                  <div className="w-8 h-8 rounded-xl bg-cyan-500 text-white flex items-center justify-center shadow-md shadow-cyan-500/30">
+                    <Target className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="font-extrabold text-slate-900 dark:text-white">Tabungan (Setor / Tarik)</p>
+                    <p className="text-[10px] text-slate-500 dark:text-cyan-300/70 font-normal">Pilih pos tabungan & setor/tarik</p>
+                  </div>
+                </button>
+              )}
+
               <button
                 onClick={() => {
                   setShowInputMenu(false);
                   onOpenCategoryManager();
                 }}
-                className="w-full flex items-center gap-3 p-3 rounded-2xl bg-cyan-50 dark:bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-100 dark:hover:bg-cyan-500/20 transition-all text-left font-bold text-xs border border-cyan-500/20 shadow-sm"
+                className="w-full flex items-center gap-3 p-3 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 transition-all text-left font-bold text-xs border border-slate-200 dark:border-slate-700 shadow-sm"
               >
-                <div className="w-8 h-8 rounded-xl bg-cyan-500 text-white flex items-center justify-center shadow-md shadow-cyan-500/30">
+                <div className="w-8 h-8 rounded-xl bg-slate-500 text-white flex items-center justify-center">
                   <Tags className="w-4 h-4" />
                 </div>
                 <div>
                   <p className="font-extrabold text-slate-900 dark:text-white">Kelola Kategori</p>
-                  <p className="text-[10px] text-slate-500 dark:text-cyan-300/70 font-normal">Tambah/hapus kategori transaksi</p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">Tambah/hapus kategori transaksi</p>
                 </div>
               </button>
             </motion.div>
@@ -129,7 +149,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       <div className="fixed bottom-3 left-3 right-3 z-40 md:hidden pointer-events-none">
         <div className="max-w-md mx-auto relative flex items-center justify-between">
           
-          {/* Floating Pink FAB Button (Input Data) - Styled like user reference image */}
+          {/* Floating Pink FAB Button */}
           <div className="absolute -top-14 right-2 pointer-events-auto">
             <button
               onClick={() => setShowInputMenu(!showInputMenu)}
@@ -169,7 +189,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
               );
             })}
 
-            {/* Input Menu Tab trigger inside the bottom bar */}
+            {/* Input Menu Tab trigger */}
             <button
               onClick={() => setShowInputMenu(true)}
               className="relative flex-1 flex flex-col items-center justify-center py-2 px-1 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 font-medium transition-all"

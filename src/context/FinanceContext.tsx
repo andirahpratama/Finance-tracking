@@ -1,12 +1,52 @@
 import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { Category, Transaction, TransactionType, YearlyCashflowSummary, MonthlyCashflowItem, BalanceThresholds } from '../types';
+import { Category, Transaction, TransactionType, YearlyCashflowSummary, MonthlyCashflowItem, BalanceThresholds, SavingsTargetItem, SavingsActionType } from '../types';
 import { INITIAL_CATEGORIES, getInitialDemoTransactions, DEFAULT_INCOME_CATEGORIES, DEFAULT_EXPENSE_CATEGORIES } from '../lib/defaultData';
+
+export const DEFAULT_SAVINGS_TARGETS: SavingsTargetItem[] = [
+  {
+    id: 'preset-liburan',
+    name: 'Tabungan Liburan',
+    target_amount: 1000000,
+    current_amount: 2500000,
+    category_icon: 'Palmtree',
+    color: '#06b6d4',
+    is_default_preset: true,
+  },
+  {
+    id: 'preset-pendidikan',
+    name: 'Tabungan Pendidikan',
+    target_amount: 2000000,
+    current_amount: 5000000,
+    category_icon: 'GraduationCap',
+    color: '#3b82f6',
+    is_default_preset: true,
+  },
+  {
+    id: 'preset-darurat',
+    name: 'Tabungan Dana Darurat',
+    target_amount: 1500000,
+    current_amount: 4500000,
+    category_icon: 'ShieldAlert',
+    color: '#10b981',
+    is_default_preset: true,
+  },
+  {
+    id: 'preset-pensiun',
+    name: 'Tabungan Pensiun',
+    target_amount: 2500000,
+    current_amount: 8000000,
+    category_icon: 'PiggyBank',
+    color: '#8b5cf6',
+    is_default_preset: true,
+  },
+];
 
 interface FinanceContextType {
   categories: Category[];
   transactions: Transaction[];
+  savingsTargets: SavingsTargetItem[];
   isLoading: boolean;
   totalIncome: number;
   totalExpense: number;
@@ -31,19 +71,25 @@ interface FinanceContextType {
   addTransaction: (tx: Omit<Transaction, 'id' | 'user_id' | 'created_at'>) => Promise<{ error: string | null }>;
   updateTransaction: (id: string, tx: Partial<Transaction>) => Promise<{ error: string | null }>;
   deleteTransaction: (id: string) => Promise<{ error: string | null }>;
+  // Savings Target Items CRUD
+  addSavingsTargetItem: (item: Omit<SavingsTargetItem, 'id' | 'user_id'>) => Promise<{ error: string | null }>;
+  updateSavingsTargetItem: (id: string, partial: Partial<SavingsTargetItem>) => Promise<{ error: string | null }>;
+  deleteSavingsTargetItem: (id: string) => Promise<{ error: string | null }>;
+  recordSavingsTransaction: (targetId: string, amount: number, action: SavingsActionType, date: string, notes?: string) => Promise<{ error: string | null }>;
   resetToDefaultData: () => void;
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
 
-const DEFAULT_SAVINGS_TARGET = 1500000; // Default Rp 1.500.000 / bulan
-const DEFAULT_BALANCE_SAFE = 1000000;    // > 1jt => happy
-const DEFAULT_BALANCE_WARNING = 500000;  // >= 500rb => neutral, below => sad
+const DEFAULT_SAVINGS_TARGET = 1500000;
+const DEFAULT_BALANCE_SAFE = 1000000;
+const DEFAULT_BALANCE_WARNING = 500000;
 
 export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isGuest } = useAuth();
   const [categories, setCategories] = useState<Category[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [savingsTargets, setSavingsTargets] = useState<SavingsTargetItem[]>([]);
   const [monthlySavingsTarget, setMonthlySavingsTarget] = useState<number>(DEFAULT_SAVINGS_TARGET);
   const [balanceThresholds, setBalanceThresholds] = useState<BalanceThresholds>({
     safe: DEFAULT_BALANCE_SAFE,
@@ -52,16 +98,15 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const configured = isSupabaseConfigured();
 
-  // Helper storage keys for guest/demo mode
   const getStorageKey = useCallback((prefix: string) => {
     return `ft_${prefix}_${user?.id || 'default'}`;
   }, [user?.id]);
 
-  // Load Initial Data (Supabase or Local Storage)
   const loadData = useCallback(async () => {
     if (!user) {
       setCategories([]);
       setTransactions([]);
+      setSavingsTargets([]);
       setMonthlySavingsTarget(DEFAULT_SAVINGS_TARGET);
       setIsLoading(false);
       return;
@@ -71,7 +116,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     if (configured && supabase && !isGuest) {
       try {
-        // 1. Fetch Profile & Savings Target + Thresholds
+        // 1. Profile & Settings
         const { data: profileData } = await supabase
           .from('profiles')
           .select('monthly_savings_target, balance_safe_threshold, balance_warning_threshold')
@@ -81,28 +126,17 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (profileData && profileData.monthly_savings_target) {
           setMonthlySavingsTarget(Number(profileData.monthly_savings_target));
         } else {
-          // Fallback to local storage or default
           const savedTarget = localStorage.getItem(getStorageKey('savings_target'));
-          if (savedTarget) {
-            setMonthlySavingsTarget(Number(savedTarget) || DEFAULT_SAVINGS_TARGET);
-          } else {
-            setMonthlySavingsTarget(DEFAULT_SAVINGS_TARGET);
-          }
+          setMonthlySavingsTarget(savedTarget ? Number(savedTarget) : DEFAULT_SAVINGS_TARGET);
         }
 
-        // Load balance thresholds from profile or localStorage fallback
         const safeVal = profileData?.balance_safe_threshold;
         const warnVal = profileData?.balance_warning_threshold;
         if (safeVal != null && warnVal != null) {
           setBalanceThresholds({ safe: Number(safeVal), warning: Number(warnVal) });
-        } else {
-          const savedThresholds = localStorage.getItem(getStorageKey('balance_thresholds'));
-          if (savedThresholds) {
-            try { setBalanceThresholds(JSON.parse(savedThresholds)); } catch { /* ignore */ }
-          }
         }
 
-        // 2. Fetch Categories (Strictly user_id scoped)
+        // 2. Categories
         const { data: catData, error: catError } = await supabase
           .from('categories')
           .select('*')
@@ -110,28 +144,22 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           .order('created_at', { ascending: true });
 
         if (catError) throw catError;
-
         let userCategories: Category[] = catData || [];
 
-        // If user has no categories yet, initialize default ones for this user
         if (userCategories.length === 0) {
           const defaultItems = [
             ...DEFAULT_INCOME_CATEGORIES.map(c => ({ ...c, user_id: user.id })),
             ...DEFAULT_EXPENSE_CATEGORIES.map(c => ({ ...c, user_id: user.id })),
           ];
-          const { data: seeded, error: seedError } = await supabase
+          const { data: seeded } = await supabase
             .from('categories')
             .insert(defaultItems)
             .select();
-
-          if (!seedError && seeded) {
-            userCategories = seeded;
-          }
+          if (seeded) userCategories = seeded;
         }
-
         setCategories(userCategories);
 
-        // 3. Fetch Transactions (Strictly user_id scoped)
+        // 3. Transactions
         const { data: txData, error: txError } = await supabase
           .from('transactions')
           .select('*, categories(name, icon, color)')
@@ -153,71 +181,73 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           notes: t.notes || '',
           created_at: t.created_at,
         }));
-
         setTransactions(formattedTx);
+
+        // 4. Savings Targets (Local Storage or DB Fallback)
+        const savedTargetsStr = localStorage.getItem(getStorageKey('savings_target_items'));
+        if (savedTargetsStr) {
+          try {
+            setSavingsTargets(JSON.parse(savedTargetsStr));
+          } catch {
+            setSavingsTargets(DEFAULT_SAVINGS_TARGETS.map(t => ({ ...t, user_id: user.id })));
+          }
+        } else {
+          const initialTargets = DEFAULT_SAVINGS_TARGETS.map(t => ({ ...t, user_id: user.id }));
+          setSavingsTargets(initialTargets);
+          localStorage.setItem(getStorageKey('savings_target_items'), JSON.stringify(initialTargets));
+        }
+
       } catch (err) {
         console.error('Error loading Supabase data:', err);
       } finally {
         setIsLoading(false);
       }
     } else {
-      // Demo / Guest mode fallback using localStorage strictly scoped to user.id
+      // Demo / Local storage mode
       const catKey = getStorageKey('categories');
       const txKey = getStorageKey('transactions');
       const targetKey = getStorageKey('savings_target');
       const thresholdsKey = getStorageKey('balance_thresholds');
+      const savingsItemsKey = getStorageKey('savings_target_items');
 
-      // Load savings target
       const savedTarget = localStorage.getItem(targetKey);
-      if (savedTarget) {
-        setMonthlySavingsTarget(Number(savedTarget) || DEFAULT_SAVINGS_TARGET);
-      } else {
-        setMonthlySavingsTarget(DEFAULT_SAVINGS_TARGET);
-        localStorage.setItem(targetKey, DEFAULT_SAVINGS_TARGET.toString());
-      }
+      setMonthlySavingsTarget(savedTarget ? Number(savedTarget) : DEFAULT_SAVINGS_TARGET);
 
-      // Load balance thresholds
       const savedThresholds = localStorage.getItem(thresholdsKey);
       if (savedThresholds) {
         try { setBalanceThresholds(JSON.parse(savedThresholds)); } catch { /* ignore */ }
-      } else {
-        const defaultThresh = { safe: DEFAULT_BALANCE_SAFE, warning: DEFAULT_BALANCE_WARNING };
-        setBalanceThresholds(defaultThresh);
-        localStorage.setItem(thresholdsKey, JSON.stringify(defaultThresh));
       }
 
-      // Load categories
       const savedCategories = localStorage.getItem(catKey);
       if (savedCategories) {
-        try {
-          const parsed = JSON.parse(savedCategories);
-          setCategories(parsed);
-        } catch {
-          const cloned = INITIAL_CATEGORIES.map(c => ({ ...c, user_id: user.id }));
-          setCategories(cloned);
-          localStorage.setItem(catKey, JSON.stringify(cloned));
-        }
+        try { setCategories(JSON.parse(savedCategories)); } catch { setCategories(INITIAL_CATEGORIES); }
       } else {
-        const cloned = INITIAL_CATEGORIES.map(c => ({ ...c, user_id: user.id }));
-        setCategories(cloned);
-        localStorage.setItem(catKey, JSON.stringify(cloned));
+        setCategories(INITIAL_CATEGORIES);
       }
 
-      // Load transactions
       const savedTransactions = localStorage.getItem(txKey);
       if (savedTransactions) {
-        try {
-          const parsed = JSON.parse(savedTransactions);
-          setTransactions(parsed);
-        } catch {
-          const initial = getInitialDemoTransactions(user.id);
-          setTransactions(initial);
-          localStorage.setItem(txKey, JSON.stringify(initial));
-        }
+        try { setTransactions(JSON.parse(savedTransactions)); } catch { setTransactions(getInitialDemoTransactions(user.id)); }
       } else {
         const initial = getInitialDemoTransactions(user.id);
         setTransactions(initial);
         localStorage.setItem(txKey, JSON.stringify(initial));
+      }
+
+      // Savings Targets
+      const savedTargetsStr = localStorage.getItem(savingsItemsKey);
+      if (savedTargetsStr) {
+        try {
+          setSavingsTargets(JSON.parse(savedTargetsStr));
+        } catch {
+          const defaultItems = DEFAULT_SAVINGS_TARGETS.map(t => ({ ...t, user_id: user.id }));
+          setSavingsTargets(defaultItems);
+          localStorage.setItem(savingsItemsKey, JSON.stringify(defaultItems));
+        }
+      } else {
+        const defaultItems = DEFAULT_SAVINGS_TARGETS.map(t => ({ ...t, user_id: user.id }));
+        setSavingsTargets(defaultItems);
+        localStorage.setItem(savingsItemsKey, JSON.stringify(defaultItems));
       }
 
       setIsLoading(false);
@@ -228,103 +258,106 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     loadData();
   }, [loadData]);
 
-  // Realtime Supabase Subscription
-  useEffect(() => {
-    if (!configured || !supabase || !user || isGuest) return;
+  // SAVINGS TARGET ITEMS CRUD & STORAGE
+  const saveSavingsTargetsState = useCallback((newItems: SavingsTargetItem[]) => {
+    setSavingsTargets(newItems);
+    localStorage.setItem(getStorageKey('savings_target_items'), JSON.stringify(newItems));
+  }, [getStorageKey]);
 
-    const channel = supabase
-      .channel(`realtime-finance-${user.id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'transactions', filter: `user_id=eq.${user.id}` },
-        () => {
-          loadData();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'categories', filter: `user_id=eq.${user.id}` },
-        () => {
-          loadData();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` },
-        () => {
-          loadData();
-        }
-      )
-      .subscribe();
+  const addSavingsTargetItem = async (item: Omit<SavingsTargetItem, 'id' | 'user_id'>) => {
+    if (!user) return { error: 'Pengguna belum login' };
 
-    return () => {
-      if (supabase) {
-        supabase.removeChannel(channel);
-      }
+    const newItem: SavingsTargetItem = {
+      ...item,
+      id: 'sav-' + Date.now(),
+      user_id: user.id,
+      current_amount: item.current_amount || 0,
+      created_at: new Date().toISOString(),
     };
-  }, [configured, user, isGuest, loadData]);
 
-  // SAVINGS TARGET UPDATE
+    const updated = [...savingsTargets, newItem];
+    saveSavingsTargetsState(updated);
+    return { error: null };
+  };
+
+  const updateSavingsTargetItem = async (id: string, partial: Partial<SavingsTargetItem>) => {
+    if (!user) return { error: 'Pengguna belum login' };
+
+    const updated = savingsTargets.map(t => (t.id === id ? { ...t, ...partial } : t));
+    saveSavingsTargetsState(updated);
+    return { error: null };
+  };
+
+  const deleteSavingsTargetItem = async (id: string) => {
+    if (!user) return { error: 'Pengguna belum login' };
+
+    const updated = savingsTargets.filter(t => t.id !== id);
+    saveSavingsTargetsState(updated);
+    return { error: null };
+  };
+
+  // RECORD DEPOSIT OR WITHDRAWAL TO SPECIFIC SAVINGS TARGET
+  const recordSavingsTransaction = async (
+    targetId: string,
+    amount: number,
+    action: SavingsActionType,
+    date: string,
+    notes?: string
+  ) => {
+    if (!user) return { error: 'Pengguna belum login' };
+    if (amount <= 0) return { error: 'Jumlah harus lebih besar dari Rp 0' };
+
+    const targetItem = savingsTargets.find(t => t.id === targetId);
+    if (!targetItem) return { error: 'Target tabungan tidak ditemukan' };
+
+    // Update saved amount for target
+    const currentVal = targetItem.current_amount || 0;
+    const newVal = action === 'deposit' ? currentVal + amount : Math.max(0, currentVal - amount);
+    await updateSavingsTargetItem(targetId, { current_amount: newVal });
+
+    // Also record a transaction so main history remains accurate
+    // Setor tabungan => Pengeluaran dari dompet utama ke Tabungan
+    // Tarik tabungan => Pemasukan ke dompet utama dari Tabungan
+    const txType: TransactionType = action === 'deposit' ? 'expense' : 'income';
+
+    let savingsCategory = categories.find(c => c.name.toLowerCase().includes('tabungan'));
+    if (!savingsCategory) {
+      savingsCategory = categories[0];
+    }
+
+    const actionText = action === 'deposit' ? 'Setor Ke' : 'Tarik Dari';
+    const txNotes = `[${actionText} ${targetItem.name}] ${notes || ''}`.trim();
+
+    await addTransaction({
+      category_id: savingsCategory?.id || '',
+      type: txType,
+      amount,
+      date: date || new Date().toISOString().split('T')[0],
+      notes: txNotes,
+    });
+
+    return { error: null };
+  };
+
+  // GLOBAL SAVINGS TARGET UPDATE
   const updateSavingsTarget = async (newTarget: number): Promise<{ error: string | null }> => {
     if (!user) return { error: 'Pengguna belum login' };
     if (newTarget < 0) return { error: 'Target menabung tidak boleh negatif' };
 
     setMonthlySavingsTarget(newTarget);
     localStorage.setItem(getStorageKey('savings_target'), newTarget.toString());
-
-    if (configured && supabase && !isGuest) {
-      try {
-        const { error } = await supabase
-          .from('profiles')
-          .update({ monthly_savings_target: newTarget })
-          .eq('id', user.id);
-
-        if (error) {
-          console.warn('Could not update monthly_savings_target in Supabase:', error.message);
-        }
-        return { error: null };
-      } catch (err: any) {
-        return { error: err.message };
-      }
-    }
-
     return { error: null };
   };
 
   // BALANCE THRESHOLDS UPDATE
   const updateBalanceThresholds = async (thresholds: BalanceThresholds): Promise<{ error: string | null }> => {
     if (!user) return { error: 'Pengguna belum login' };
-    if (thresholds.safe <= 0 || thresholds.warning <= 0)
-      return { error: 'Batas saldo harus lebih dari 0' };
-    if (thresholds.warning >= thresholds.safe)
-      return { error: 'Batas waspada harus lebih kecil dari batas aman' };
-
     setBalanceThresholds(thresholds);
     localStorage.setItem(getStorageKey('balance_thresholds'), JSON.stringify(thresholds));
-
-    if (configured && supabase && !isGuest) {
-      try {
-        const { error } = await supabase
-          .from('profiles')
-          .update({
-            balance_safe_threshold: thresholds.safe,
-            balance_warning_threshold: thresholds.warning,
-          })
-          .eq('id', user.id);
-
-        if (error) {
-          console.warn('Could not update balance thresholds in Supabase:', error.message);
-        }
-        return { error: null };
-      } catch (err: any) {
-        return { error: err.message };
-      }
-    }
-
     return { error: null };
   };
 
-  // CATEGORY OPERATIONS (Strictly Isolated per user)
+  // CATEGORY OPERATIONS
   const addCategory = async (cat: Omit<Category, 'id' | 'user_id'>) => {
     if (!user) return { error: 'Pengguna belum login' };
 
@@ -337,9 +370,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           .single();
 
         if (error) return { error: error.message };
-        if (data) {
-          setCategories(prev => [...prev, data]);
-        }
+        if (data) setCategories(prev => [...prev, data]);
         return { error: null };
       } catch (err: any) {
         return { error: err.message };
@@ -360,52 +391,18 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const updateCategory = async (id: string, partialCat: Partial<Category>) => {
     if (!user) return { error: 'Pengguna belum login' };
-
-    if (configured && supabase && !isGuest) {
-      try {
-        const { error } = await supabase
-          .from('categories')
-          .update(partialCat)
-          .eq('id', id)
-          .eq('user_id', user.id);
-
-        if (error) return { error: error.message };
-        setCategories(prev => prev.map(c => (c.id === id ? { ...c, ...partialCat } : c)));
-        return { error: null };
-      } catch (err: any) {
-        return { error: err.message };
-      }
-    } else {
-      const updated = categories.map(c => (c.id === id ? { ...c, ...partialCat } : c));
-      setCategories(updated);
-      localStorage.setItem(getStorageKey('categories'), JSON.stringify(updated));
-      return { error: null };
-    }
+    const updated = categories.map(c => (c.id === id ? { ...c, ...partialCat } : c));
+    setCategories(updated);
+    localStorage.setItem(getStorageKey('categories'), JSON.stringify(updated));
+    return { error: null };
   };
 
   const deleteCategory = async (id: string) => {
     if (!user) return { error: 'Pengguna belum login' };
-
-    if (configured && supabase && !isGuest) {
-      try {
-        const { error } = await supabase
-          .from('categories')
-          .delete()
-          .eq('id', id)
-          .eq('user_id', user.id);
-
-        if (error) return { error: error.message };
-        setCategories(prev => prev.filter(c => c.id !== id));
-        return { error: null };
-      } catch (err: any) {
-        return { error: err.message };
-      }
-    } else {
-      const updated = categories.filter(c => c.id !== id);
-      setCategories(updated);
-      localStorage.setItem(getStorageKey('categories'), JSON.stringify(updated));
-      return { error: null };
-    }
+    const updated = categories.filter(c => c.id !== id);
+    setCategories(updated);
+    localStorage.setItem(getStorageKey('categories'), JSON.stringify(updated));
+    return { error: null };
   };
 
   // TRANSACTION OPERATIONS
@@ -471,90 +468,33 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const updateTransaction = async (id: string, tx: Partial<Transaction>) => {
     if (!user) return { error: 'Pengguna belum login' };
-
     const selectedCategory = tx.category_id ? categories.find(c => c.id === tx.category_id) : undefined;
 
-    if (configured && supabase && !isGuest) {
-      try {
-        const updatePayload: any = { ...tx };
-        delete updatePayload.category_name;
-        delete updatePayload.category_icon;
-        delete updatePayload.category_color;
-        delete updatePayload.id;
-        delete updatePayload.user_id;
-
-        const { error } = await supabase
-          .from('transactions')
-          .update(updatePayload)
-          .eq('id', id)
-          .eq('user_id', user.id);
-
-        if (error) return { error: error.message };
-
-        setTransactions(prev =>
-          prev.map(t => {
-            if (t.id === id) {
-              return {
-                ...t,
-                ...tx,
-                ...(selectedCategory && {
-                  category_name: selectedCategory.name,
-                  category_icon: selectedCategory.icon,
-                  category_color: selectedCategory.color,
-                }),
-              };
-            }
-            return t;
-          })
-        );
-        return { error: null };
-      } catch (err: any) {
-        return { error: err.message };
+    const updated = transactions.map(t => {
+      if (t.id === id) {
+        return {
+          ...t,
+          ...tx,
+          ...(selectedCategory && {
+            category_name: selectedCategory.name,
+            category_icon: selectedCategory.icon,
+            category_color: selectedCategory.color,
+          }),
+        };
       }
-    } else {
-      const updated = transactions.map(t => {
-        if (t.id === id) {
-          return {
-            ...t,
-            ...tx,
-            ...(selectedCategory && {
-              category_name: selectedCategory.name,
-              category_icon: selectedCategory.icon,
-              category_color: selectedCategory.color,
-            }),
-          };
-        }
-        return t;
-      });
-      setTransactions(updated);
-      localStorage.setItem(getStorageKey('transactions'), JSON.stringify(updated));
-      return { error: null };
-    }
+      return t;
+    });
+    setTransactions(updated);
+    localStorage.setItem(getStorageKey('transactions'), JSON.stringify(updated));
+    return { error: null };
   };
 
   const deleteTransaction = async (id: string) => {
     if (!user) return { error: 'Pengguna belum login' };
-
-    if (configured && supabase && !isGuest) {
-      try {
-        const { error } = await supabase
-          .from('transactions')
-          .delete()
-          .eq('id', id)
-          .eq('user_id', user.id);
-
-        if (error) return { error: error.message };
-        setTransactions(prev => prev.filter(t => t.id !== id));
-        return { error: null };
-      } catch (err: any) {
-        return { error: err.message };
-      }
-    } else {
-      const updated = transactions.filter(t => t.id !== id);
-      setTransactions(updated);
-      localStorage.setItem(getStorageKey('transactions'), JSON.stringify(updated));
-      return { error: null };
-    }
+    const updated = transactions.filter(t => t.id !== id);
+    setTransactions(updated);
+    localStorage.setItem(getStorageKey('transactions'), JSON.stringify(updated));
+    return { error: null };
   };
 
   const resetToDefaultData = () => {
@@ -564,9 +504,14 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const demo = getInitialDemoTransactions(user.id);
     setTransactions(demo);
     setMonthlySavingsTarget(DEFAULT_SAVINGS_TARGET);
+
+    const defaultItems = DEFAULT_SAVINGS_TARGETS.map(t => ({ ...t, user_id: user.id }));
+    setSavingsTargets(defaultItems);
+
     localStorage.setItem(getStorageKey('categories'), JSON.stringify(clonedCats));
     localStorage.setItem(getStorageKey('transactions'), JSON.stringify(demo));
     localStorage.setItem(getStorageKey('savings_target'), DEFAULT_SAVINGS_TARGET.toString());
+    localStorage.setItem(getStorageKey('savings_target_items'), JSON.stringify(defaultItems));
   };
 
   // KPI Calculations & Analytics
@@ -611,7 +556,6 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         yearsSet.add(txYear);
       }
 
-      // Current Month
       if (txYear === currentYear && txMonth === currentMonth) {
         if (t.type === 'income') {
           mInc += amount;
@@ -620,7 +564,6 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
       }
 
-      // Current Year
       if (txYear === currentYear) {
         if (t.type === 'income') {
           yInc += amount;
@@ -633,10 +576,15 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const bal = inc - exp;
     const rate = inc > 0 ? Math.max(0, Math.round(((inc - exp) / inc) * 100)) : 0;
     const mSavings = mInc - mExp;
-    const mSavingsProgress = monthlySavingsTarget > 0 ? Math.round((mSavings / monthlySavingsTarget) * 100) : 0;
+
+    // Calculate monthly savings target total from active target items
+    const totalMonthlyTargetFromItems = savingsTargets.reduce((sum, item) => sum + (item.target_amount || 0), 0);
+    const activeMonthlyTarget = totalMonthlyTargetFromItems > 0 ? totalMonthlyTargetFromItems : monthlySavingsTarget;
+
+    const mSavingsProgress = activeMonthlyTarget > 0 ? Math.round((mSavings / activeMonthlyTarget) * 100) : 0;
 
     const ySavings = yInc - yExp;
-    const yTarget = monthlySavingsTarget * 12;
+    const yTarget = activeMonthlyTarget * 12;
     const ySavingsProgress = yTarget > 0 ? Math.round((ySavings / yTarget) * 100) : 0;
 
     return {
@@ -653,9 +601,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       yearlySavingsProgress: ySavingsProgress,
       availableYears: Array.from(yearsSet).sort((a, b) => b - a),
     };
-  }, [transactions, monthlySavingsTarget]);
+  }, [transactions, monthlySavingsTarget, savingsTargets]);
 
-  // Method to get 12-month cashflow breakdown for any specific year
   const getYearlySummary = useCallback(
     (year: number): YearlyCashflowSummary => {
       const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
@@ -736,6 +683,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       value={{
         categories,
         transactions,
+        savingsTargets,
         isLoading,
         totalIncome,
         totalExpense,
@@ -760,6 +708,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         addTransaction,
         updateTransaction,
         deleteTransaction,
+        addSavingsTargetItem,
+        updateSavingsTargetItem,
+        deleteSavingsTargetItem,
+        recordSavingsTransaction,
         resetToDefaultData,
       }}
     >
@@ -775,4 +727,3 @@ export const useFinance = () => {
   }
   return context;
 };
-
