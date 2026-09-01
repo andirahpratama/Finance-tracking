@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Edit2, Trash2, Calendar, AlertCircle } from 'lucide-react';
+import { Edit2, Trash2, Calendar, AlertCircle, BookmarkCheck } from 'lucide-react';
 import { Transaction } from '../../types';
 import { CategoryIcon } from '../ui/CategoryIcon';
 import { formatDateIndo, formatRupiah } from '../../lib/formatters';
 
 interface TransactionListProps {
   transactions: Transaction[];
+  openingBalance?: number;
   onEdit: (transaction: Transaction) => void;
   onDelete: (id: string) => void;
   onAddNew: () => void;
@@ -14,6 +15,7 @@ interface TransactionListProps {
 
 export const TransactionList: React.FC<TransactionListProps> = ({
   transactions,
+  openingBalance,
   onEdit,
   onDelete,
   onAddNew,
@@ -25,7 +27,9 @@ export const TransactionList: React.FC<TransactionListProps> = ({
     setDeleteId(null);
   };
 
-  if (transactions.length === 0) {
+  const hasOpeningBalance = openingBalance !== undefined && openingBalance !== 0;
+
+  if (transactions.length === 0 && !hasOpeningBalance) {
     return (
       <div className="flex flex-col items-center justify-center p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-dashed border-slate-200 dark:border-slate-800 text-center">
         <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-3">
@@ -47,6 +51,42 @@ export const TransactionList: React.FC<TransactionListProps> = ({
 
   return (
     <div className="space-y-2.5">
+      {/* Saldo dari Bulan Sebelumnya Banner */}
+      {hasOpeningBalance && (
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-blue-50 via-slate-50 to-emerald-50/40 dark:from-slate-900 dark:via-slate-900 dark:to-slate-850 border border-blue-200/80 dark:border-blue-900/40 flex items-center justify-between shadow-sm">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center flex-shrink-0 border border-blue-500/20 font-bold">
+              <BookmarkCheck className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white truncate">
+                  Saldo dari Bulan Sebelumnya
+                </h4>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-300 font-semibold border border-blue-500/20">
+                  Sisa Saldo
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                Akumulasi sisa / defisit saldo dari bulan-bulan sebelumnya
+              </p>
+            </div>
+          </div>
+
+          <div className="text-right flex-shrink-0 pl-2">
+            <span
+              className={`font-black text-sm sm:text-base tracking-tight ${
+                (openingBalance ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+              }`}
+            >
+              {(openingBalance ?? 0) >= 0 ? '+' : ''}
+              {formatRupiah(openingBalance ?? 0)}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Transaction Items */}
       <AnimatePresence mode="popLayout">
         {transactions.map((t) => {
           const isIncome = t.type === 'income';
@@ -182,4 +222,3 @@ export const TransactionList: React.FC<TransactionListProps> = ({
     </div>
   );
 };
-

@@ -55,13 +55,44 @@ export const App: React.FC = () => {
   const [isSavingsTargetModalOpen, setIsSavingsTargetModalOpen] = useState(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
-  // Filters state
+  // Filters state (Default to 'this_month' for isolated monthly history)
   const [filters, setFilters] = useState<FilterOptions>({
     searchTerm: '',
     type: 'all',
     categoryId: '',
-    period: 'all',
+    period: 'this_month',
   });
+
+  // Opening balance carried over from prior months ("Saldo dari bulan sebelumnya")
+  const openingBalance = useMemo(() => {
+    if (filters.period === 'all') return 0;
+
+    const now = new Date();
+    let cutoffDate: Date;
+
+    if (filters.period === 'this_month') {
+      cutoffDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    } else if (filters.period === 'last_month') {
+      cutoffDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    } else if (filters.period === 'this_year') {
+      cutoffDate = new Date(now.getFullYear(), 0, 1);
+    } else {
+      return 0;
+    }
+
+    let priorInc = 0;
+    let priorExp = 0;
+
+    transactions.forEach((t) => {
+      const txDate = new Date(t.date);
+      if (txDate < cutoffDate) {
+        if (t.type === 'income') priorInc += Number(t.amount) || 0;
+        else priorExp += Number(t.amount) || 0;
+      }
+    });
+
+    return priorInc - priorExp;
+  }, [transactions, filters.period]);
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter((t) => {
@@ -332,6 +363,7 @@ export const App: React.FC = () => {
               {/* List of Transactions */}
               <TransactionList
                 transactions={filteredTransactions}
+                openingBalance={openingBalance}
                 onEdit={handleEditTransaction}
                 onDelete={deleteTransaction}
                 onAddNew={handleOpenExpense}

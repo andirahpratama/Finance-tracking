@@ -190,24 +190,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* DESKTOP Right Actions & Profile */}
           <div className="hidden md:flex items-center gap-2 lg:gap-3">
-            {/* Quick Action: Tambah Pengeluaran */}
-            <button
-              onClick={onOpenExpenseModal}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-md shadow-rose-950/20 dark:shadow-rose-950 transition-all active:scale-95"
-            >
-              <ArrowDownRight className="w-4 h-4" />
-              <span>Pengeluaran</span>
-            </button>
-
-            {/* Quick Action: Tambah Pemasukan */}
-            <button
-              onClick={onOpenIncomeModal}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-950/20 dark:shadow-emerald-950 transition-all active:scale-95"
-            >
-              <ArrowUpRight className="w-4 h-4" />
-              <span>Pemasukan</span>
-            </button>
-
             {/* Dark/Light Mode Switcher */}
             <ThemeToggle />
 
