@@ -13,14 +13,21 @@ import {
   X,
   Target,
   ChevronRight,
+  Home,
+  BarChart3,
+  Receipt,
+  PlusCircle,
 } from 'lucide-react';
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
 import { useFinance } from '../../context/FinanceContext';
 import { ThemeToggle } from '../ui/ThemeToggle';
+import { TabType } from './MobileBottomNav';
 
 interface NavbarProps {
+  activeTab: TabType;
+  onSelectTab: (tab: TabType) => void;
   onOpenIncomeModal: () => void;
   onOpenExpenseModal: () => void;
   onOpenCategoryManager: () => void;
@@ -29,6 +36,8 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
+  activeTab,
+  onSelectTab,
   onOpenIncomeModal,
   onOpenExpenseModal,
   onOpenCategoryManager,
@@ -40,6 +49,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [showInputDropdown, setShowInputDropdown] = useState(false);
 
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
 
@@ -49,27 +59,35 @@ export const Navbar: React.FC<NavbarProps> = ({
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  const desktopTabs: { id: TabType | 'input'; label: string; icon: React.ElementType }[] = [
+    { id: 'home', label: 'Home', icon: Home },
+    { id: 'input', label: 'Input', icon: PlusCircle },
+    { id: 'rekap', label: 'Rekap', icon: BarChart3 },
+    { id: 'history', label: 'History', icon: Receipt },
+    { id: 'tabungan', label: 'Tabungan', icon: Target },
+  ];
+
   return (
     <header className={`sticky top-0 z-50 w-full border-b border-slate-200 dark:border-slate-800/80 bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl transition-all duration-200 ${isScrolled ? 'shadow-md shadow-slate-200/60 dark:shadow-slate-950/60' : ''}`}>
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 gap-2 sm:gap-4">
           {/* Logo & Brand */}
           <div className="flex items-center gap-2.5 sm:gap-3 flex-shrink-0">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 via-teal-500 to-emerald-400 flex items-center justify-center shadow-md shadow-emerald-950/20 dark:shadow-emerald-950">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 via-teal-500 to-emerald-400 flex items-center justify-center shadow-md shadow-emerald-950/20 dark:shadow-emerald-950 cursor-pointer" onClick={() => onSelectTab('home')}>
               <Wallet className="w-4 h-4 sm:w-5 sm:h-5 text-white dark:text-slate-950" />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 cursor-pointer" onClick={() => onSelectTab('home')}>
               <div className="flex items-center gap-1.5 sm:gap-2">
                 <span className="font-black text-base sm:text-lg text-slate-900 dark:text-white tracking-tight truncate">
                   Finance Tracking
                 </span>
                 {isConfigured && !isGuest ? (
-                  <span className="hidden lg:inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-semibold">
+                  <span className="hidden xl:inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-semibold">
                     <Radio className="w-2.5 h-2.5 animate-pulse text-emerald-500" />
                     Realtime
                   </span>
                 ) : (
-                  <span className="hidden lg:inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-semibold">
+                  <span className="hidden xl:inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-semibold">
                     <Sparkles className="w-2.5 h-2.5 text-amber-500" />
                     Demo
                   </span>
@@ -81,7 +99,85 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
 
-          {/* DESKTOP Action Buttons & Profile (Visible on md and up) */}
+          {/* DESKTOP Floating Header Tab Menu */}
+          <nav className="hidden md:flex items-center p-1 rounded-2xl bg-slate-100/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-inner gap-1">
+            {desktopTabs.map((tab) => {
+              const Icon = tab.icon;
+              const isSelected = activeTab === tab.id;
+
+              if (tab.id === 'input') {
+                return (
+                  <div key={tab.id} className="relative">
+                    <button
+                      onClick={() => setShowInputDropdown(!showInputDropdown)}
+                      className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 ${
+                        showInputDropdown
+                          ? 'bg-rose-500 text-white shadow-md shadow-rose-500/30'
+                          : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800/60'
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5 text-pink-500" />
+                      <span>{tab.label}</span>
+                    </button>
+
+                    {/* Input Quick Action Dropdown */}
+                    {showInputDropdown && (
+                      <div
+                        className="absolute left-0 mt-2 w-48 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2"
+                        onClick={() => setShowInputDropdown(false)}
+                      >
+                        <button
+                          onClick={onOpenExpenseModal}
+                          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors text-left"
+                        >
+                          <ArrowDownRight className="w-4 h-4 text-rose-500" />
+                          Catat Pengeluaran
+                        </button>
+                        <button
+                          onClick={onOpenIncomeModal}
+                          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors text-left"
+                        >
+                          <ArrowUpRight className="w-4 h-4 text-emerald-500" />
+                          Catat Pemasukan
+                        </button>
+                        <button
+                          onClick={onOpenCategoryManager}
+                          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-cyan-600 dark:text-cyan-400 hover:bg-cyan-50 dark:hover:bg-cyan-500/10 transition-colors text-left"
+                        >
+                          <Tags className="w-4 h-4 text-cyan-500" />
+                          Kelola Kategori
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => onSelectTab(tab.id as TabType)}
+                  className={`relative flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 ${
+                    isSelected
+                      ? 'text-white'
+                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800/60'
+                  }`}
+                >
+                  {isSelected && (
+                    <motion.div
+                      layoutId="desktopActiveHeaderTab"
+                      className="absolute inset-0 bg-gradient-to-r from-emerald-600 to-teal-500 rounded-xl shadow-md shadow-emerald-600/30"
+                      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                    />
+                  )}
+                  <Icon className={`w-3.5 h-3.5 relative z-10 ${isSelected ? 'text-white' : ''}`} />
+                  <span className="relative z-10">{tab.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* DESKTOP Right Actions & Profile */}
           <div className="hidden md:flex items-center gap-2 lg:gap-3">
             {/* Quick Action: Tambah Pengeluaran */}
             <button
@@ -99,28 +195,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <ArrowUpRight className="w-4 h-4" />
               <span>Pemasukan</span>
-            </button>
-
-            {/* Savings Target Button */}
-            {onOpenSavingsTargetModal && (
-              <button
-                onClick={onOpenSavingsTargetModal}
-                title="Atur Target Menabung"
-                className="flex items-center gap-1 px-2.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors"
-              >
-                <Target className="w-4 h-4 text-emerald-500" />
-                <span className="hidden lg:inline">Target</span>
-              </button>
-            )}
-
-            {/* Category Manager Button */}
-            <button
-              onClick={onOpenCategoryManager}
-              title="Kelola Kategori"
-              className="flex items-center gap-1 px-2.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors"
-            >
-              <Tags className="w-4 h-4 text-cyan-500" />
-              <span className="hidden lg:inline">Kategori</span>
             </button>
 
             {/* Dark/Light Mode Switcher */}
@@ -196,26 +270,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
 
-          {/* MOBILE Header Controls (< md) - Compact & Zero-Scroll */}
+          {/* MOBILE Header Controls (< md) - Compact */}
           <div className="flex md:hidden items-center gap-1.5">
-            {/* Quick Add Income (+) */}
-            <button
-              onClick={onOpenIncomeModal}
-              title="Tambah Pemasukan"
-              className="p-2 rounded-xl bg-emerald-600 text-white shadow-sm active:scale-95 transition-transform"
-            >
-              <ArrowUpRight className="w-4 h-4" />
-            </button>
-
-            {/* Quick Add Expense (-) */}
-            <button
-              onClick={onOpenExpenseModal}
-              title="Tambah Pengeluaran"
-              className="p-2 rounded-xl bg-rose-600 text-white shadow-sm active:scale-95 transition-transform"
-            >
-              <ArrowDownRight className="w-4 h-4" />
-            </button>
-
             {/* Theme Toggle */}
             <ThemeToggle />
 
@@ -255,7 +311,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               <div className="space-y-5">
                 {/* Drawer Header */}
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white">
                       <Wallet className="w-4 h-4" />
@@ -292,42 +347,84 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </div>
                 )}
 
-                {/* Quick Add Transactions in Drawer */}
-                <div className="space-y-2">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                    Aksi Transaksi Cepat
-                  </span>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => {
-                        closeMobileMenu();
-                        onOpenExpenseModal();
-                      }}
-                      className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-rose-600 text-white text-xs font-bold shadow-sm active:scale-95"
-                    >
-                      <ArrowDownRight className="w-4 h-4" />
-                      + Pengeluaran
-                    </button>
-                    <button
-                      onClick={() => {
-                        closeMobileMenu();
-                        onOpenIncomeModal();
-                      }}
-                      className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-bold shadow-sm active:scale-95"
-                    >
-                      <ArrowUpRight className="w-4 h-4" />
-                      + Pemasukan
-                    </button>
-                  </div>
-                </div>
-
-                {/* Navigation Menu Links */}
+                {/* Mobile Drawer Menu Links */}
                 <div className="space-y-1">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-2">
-                    Fitur & Pengaturan
+                    Navigasi Halaman
                   </span>
 
-                  {/* Target Menabung Link */}
+                  <button
+                    onClick={() => {
+                      onSelectTab('home');
+                      closeMobileMenu();
+                    }}
+                    className={`w-full flex items-center justify-between p-3 rounded-xl text-left transition-colors ${
+                      activeTab === 'home' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold' : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Home className="w-4 h-4 text-emerald-500" />
+                      <span className="text-xs">Home (Saldo & Ringkasan)</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      onSelectTab('rekap');
+                      closeMobileMenu();
+                    }}
+                    className={`w-full flex items-center justify-between p-3 rounded-xl text-left transition-colors ${
+                      activeTab === 'rekap' ? 'bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400 font-bold' : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <BarChart3 className="w-4 h-4 text-purple-500" />
+                      <span className="text-xs">Rekap (Grafik Keuangan)</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      onSelectTab('history');
+                      closeMobileMenu();
+                    }}
+                    className={`w-full flex items-center justify-between p-3 rounded-xl text-left transition-colors ${
+                      activeTab === 'history' ? 'bg-cyan-50 dark:bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 font-bold' : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Receipt className="w-4 h-4 text-cyan-500" />
+                      <span className="text-xs">History (Catatan Arus Kas)</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      onSelectTab('tabungan');
+                      closeMobileMenu();
+                    }}
+                    className={`w-full flex items-center justify-between p-3 rounded-xl text-left transition-colors ${
+                      activeTab === 'tabungan' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold' : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Target className="w-4 h-4 text-emerald-500" />
+                      <span className="text-xs">Tabungan (Target Menabung)</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  </button>
+                </div>
+
+                {/* Features & Settings in Drawer */}
+                <div className="space-y-1 pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-2">
+                    Fitur Tambahan
+                  </span>
+
+                  {/* Target Menabung Modal Link */}
                   {onOpenSavingsTargetModal && (
                     <button
                       onClick={() => {
@@ -341,8 +438,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                           <Target className="w-4 h-4" />
                         </div>
                         <div>
-                          <p className="text-xs font-bold text-slate-900 dark:text-white">Target Menabung</p>
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400">Atur komitmen tabungan bulanan</p>
+                          <p className="text-xs font-bold text-slate-900 dark:text-white">Atur Target Menabung</p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">Atur komitmen tabungan</p>
                         </div>
                       </div>
                       <ChevronRight className="w-4 h-4 text-slate-400" />
@@ -363,7 +460,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       </div>
                       <div>
                         <p className="text-xs font-bold text-slate-900 dark:text-white">Kelola Kategori</p>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400">Tambah / ubah jenis transaksi</p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">Tambah / ubah kategori</p>
                       </div>
                     </div>
                     <ChevronRight className="w-4 h-4 text-slate-400" />
