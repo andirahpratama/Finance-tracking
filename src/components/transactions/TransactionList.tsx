@@ -53,27 +53,27 @@ export const TransactionList: React.FC<TransactionListProps> = ({
     <div className="space-y-2.5">
       {/* Saldo dari Bulan Sebelumnya Banner */}
       {hasOpeningBalance && (
-        <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-blue-50 via-slate-50 to-emerald-50/40 dark:from-slate-900 dark:via-slate-900 dark:to-slate-850 border border-blue-200/80 dark:border-blue-900/40 flex items-center justify-between shadow-sm">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center flex-shrink-0 border border-blue-500/20 font-bold">
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-blue-50 via-slate-50 to-emerald-50/40 dark:from-slate-900 dark:via-slate-900 dark:to-slate-850 border border-blue-200/80 dark:border-blue-900/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-sm">
+          <div className="flex items-start sm:items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center flex-shrink-0 border border-blue-500/20 font-bold mt-0.5 sm:mt-0">
               <BookmarkCheck className="w-5 h-5" />
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white truncate">
+            <div className="min-w-0 space-y-0.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white leading-snug">
                   Saldo dari Bulan Sebelumnya
                 </h4>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-300 font-semibold border border-blue-500/20">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-300 font-semibold border border-blue-500/20 shrink-0">
                   Sisa Saldo
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal">
                 Akumulasi sisa / defisit saldo dari bulan-bulan sebelumnya
               </p>
             </div>
           </div>
 
-          <div className="text-right flex-shrink-0 pl-2">
+          <div className="text-left sm:text-right flex-shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-blue-200/40 dark:border-blue-900/30">
             <span
               className={`font-black text-sm sm:text-base tracking-tight ${
                 (openingBalance ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
@@ -99,24 +99,24 @@ export const TransactionList: React.FC<TransactionListProps> = ({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.2 }}
-              className="group relative flex items-center justify-between p-3.5 sm:p-4 rounded-2xl bg-white dark:bg-slate-900/80 hover:bg-slate-50 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700/80 transition-all shadow-sm"
+              className="group relative p-3.5 sm:p-4 rounded-2xl bg-white dark:bg-slate-900/80 hover:bg-slate-50 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700/80 transition-all shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3"
             >
               {/* Left Column: Icon & Details */}
-              <div className="flex items-center gap-3.5 min-w-0">
+              <div className="flex items-start sm:items-center gap-3.5 min-w-0 flex-1">
                 <div
-                  className="w-10 h-10 rounded-xl flex items-center justify-center text-white flex-shrink-0 shadow-md"
+                  className="w-10 h-10 rounded-xl flex items-center justify-center text-white flex-shrink-0 shadow-md mt-0.5 sm:mt-0"
                   style={{ backgroundColor: t.category_color || '#64748B' }}
                 >
                   <CategoryIcon name={t.category_icon || 'Wallet'} className="w-5 h-5" />
                 </div>
 
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-slate-900 dark:text-white text-sm truncate">
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                    <span className="font-bold text-slate-900 dark:text-white text-sm sm:text-base leading-snug break-words">
                       {t.category_name || 'Lainnya'}
                     </span>
                     <span
-                      className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${
+                      className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border shrink-0 ${
                         isIncome
                           ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border-emerald-500/20'
                           : 'bg-rose-500/10 text-rose-600 dark:text-rose-300 border-rose-500/20'
@@ -126,25 +126,22 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    <span>{formatDateIndo(t.date)}</span>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
+                    <span className="font-medium text-slate-500 dark:text-slate-400">{formatDateIndo(t.date)}</span>
                     {t.notes && (
-                      <>
-                        <span>•</span>
-                        <span className="truncate max-w-[140px] sm:max-w-xs text-slate-700 dark:text-slate-300">
-                          {t.notes}
-                        </span>
-                      </>
+                      <span className="text-slate-700 dark:text-slate-300 break-words font-normal">
+                        • {t.notes}
+                      </span>
                     )}
                   </div>
                 </div>
               </div>
 
               {/* Right Column: Amount & Actions */}
-              <div className="flex items-center gap-3 flex-shrink-0">
-                <div className="text-right">
+              <div className="flex items-center justify-between sm:justify-end gap-3.5 pt-2.5 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800/60 flex-shrink-0">
+                <div className="text-left sm:text-right">
                   <span
-                    className={`font-extrabold text-sm sm:text-base tracking-tight flex items-center justify-end gap-0.5 ${
+                    className={`font-black text-base sm:text-base tracking-tight flex items-center justify-start sm:justify-end gap-0.5 ${
                       isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
                     }`}
                   >
@@ -154,11 +151,11 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                 </div>
 
                 {/* Edit & Delete Action Buttons */}
-                <div className="flex items-center gap-1 opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center gap-1 opacity-100 sm:opacity-90 sm:group-hover:opacity-100 transition-opacity">
                   <button
                     onClick={() => onEdit(t)}
                     title="Edit transaksi"
-                    className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                    className="p-2 sm:p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                   >
                     <Edit2 className="w-4 h-4" />
                   </button>
@@ -166,7 +163,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                   <button
                     onClick={() => setDeleteId(t.id)}
                     title="Hapus transaksi"
-                    className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
+                    className="p-2 sm:p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
