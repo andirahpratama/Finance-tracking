@@ -17,6 +17,7 @@ import {
   BarChart3,
   Receipt,
   PlusCircle,
+  Settings,
 } from 'lucide-react';
 
 import { motion, AnimatePresence } from 'framer-motion';
@@ -34,6 +35,7 @@ interface NavbarProps {
   onOpenCategoryManager: () => void;
   onOpenAuthModal: () => void;
   onOpenSavingsTargetModal?: () => void;
+  onOpenProfileSettings?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -45,6 +47,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenCategoryManager,
   onOpenAuthModal,
   onOpenSavingsTargetModal,
+  onOpenProfileSettings,
 }) => {
   const { user, isGuest, isConfigured, signOut } = useAuth();
   const { resetToDefaultData } = useFinance();
@@ -233,6 +236,16 @@ export const Navbar: React.FC<NavbarProps> = ({
                         </button>
                       )}
 
+                      {onOpenProfileSettings && (
+                        <button
+                          onClick={onOpenProfileSettings}
+                          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left"
+                        >
+                          <Settings className="w-3.5 h-3.5 text-emerald-500" />
+                          Pengaturan Profil & Finny
+                        </button>
+                      )}
+
                       <button
                         onClick={resetToDefaultData}
                         className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left"
@@ -416,6 +429,28 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-2">
                     Fitur Tambahan
                   </span>
+
+                  {/* Pengaturan Profil & Finny Link */}
+                  {onOpenProfileSettings && (
+                    <button
+                      onClick={() => {
+                        closeMobileMenu();
+                        onOpenProfileSettings();
+                      }}
+                      className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 text-left transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                          <Settings className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-900 dark:text-white">Pengaturan Profil & Finny</p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">Atur profil & acuan emosi maskot</p>
+                        </div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-slate-400" />
+                    </button>
+                  )}
 
                   {/* Target Menabung Modal Link */}
                   {onOpenSavingsTargetModal && (

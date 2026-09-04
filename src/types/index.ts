@@ -31,16 +31,16 @@ export interface UserProfile {
   full_name?: string;
   avatar_url?: string;
   monthly_savings_target?: number;
-  balance_safe_threshold?: number;   // default 1_000_000 — mood: happy
-  balance_warning_threshold?: number; // default 500_000  — mood: neutral
-  balance_critical_threshold?: number; // below this     — mood: sad
+  balance_safe_threshold?: number;   // default 100_000 (Rp/hari) — mood: happy
+  balance_warning_threshold?: number; // default 50_000 (Rp/hari) — mood: neutral
+  balance_critical_threshold?: number; // below warning — mood: sad
   created_at?: string;
 }
 
 export interface BalanceThresholds {
-  safe: number;     // balance > safe  => happy
-  warning: number;  // balance >= warning && <= safe => neutral
-  // below warning => sad
+  safe: number;     // daily balance rate > safe => happy (default: 100,000 IDR/day)
+  warning: number;  // daily balance rate >= warning && <= safe => neutral (default: 50,000 IDR/day)
+  // daily balance rate < warning => sad
 }
 
 export type MascotMood = 'happy' | 'neutral' | 'sad';

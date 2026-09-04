@@ -82,8 +82,8 @@ interface FinanceContextType {
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
 
 const DEFAULT_SAVINGS_TARGET = 1500000;
-const DEFAULT_BALANCE_SAFE = 1000000;
-const DEFAULT_BALANCE_WARNING = 500000;
+const DEFAULT_BALANCE_SAFE = 100000; // Rp 100.000 / hari
+const DEFAULT_BALANCE_WARNING = 50000; // Rp 50.000 / hari
 
 export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isGuest } = useAuth();

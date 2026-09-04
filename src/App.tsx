@@ -16,6 +16,7 @@ import { TransactionModal } from './components/transactions/TransactionModal';
 import { CategoryManagerModal } from './components/categories/CategoryManagerModal';
 import { PrintReportModal } from './components/reports/PrintReportModal';
 import { AuthModal } from './components/auth/AuthModal';
+import { ProfileSettingsModal } from './components/profile/ProfileSettingsModal';
 import { exportTransactionsToCSV } from './lib/exportUtils';
 import { FilterOptions, Transaction, TransactionType } from './types';
 import {
@@ -54,6 +55,7 @@ export const App: React.FC = () => {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isSavingsTargetModalOpen, setIsSavingsTargetModalOpen] = useState(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   // Filters state (Default to 'monthly' with current date selections)
   const [filters, setFilters] = useState<FilterOptions>({
@@ -213,6 +215,7 @@ export const App: React.FC = () => {
         onOpenCategoryManager={() => setIsCategoryModalOpen(true)}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
         onOpenSavingsTargetModal={() => setIsSavingsTargetModalOpen(true)}
+        onOpenProfileSettings={() => setIsProfileModalOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -222,7 +225,7 @@ export const App: React.FC = () => {
         {activeTab === 'home' && (
           <div className="space-y-6 animate-in fade-in duration-300">
             {/* Animated Mascot & Greeting */}
-            <AnimatedMascot balance={totalBalance} />
+            <AnimatedMascot balance={totalBalance} onOpenSettings={() => setIsProfileModalOpen(true)} />
 
             {/* Home Only KPI Summary Cards Grid (Total Saldo, Total Pemasukan, Total Pengeluaran) */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
@@ -444,6 +447,11 @@ export const App: React.FC = () => {
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
+      />
+
+      <ProfileSettingsModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
       />
     </div>
   );
