@@ -57,9 +57,12 @@ export interface FilterOptions {
   searchTerm: string;
   type: 'all' | 'income' | 'expense';
   categoryId: string;
-  period: 'all' | 'this_month' | 'last_month' | 'this_year' | 'custom';
+  period: 'all' | 'this_month' | 'last_month' | 'this_year' | 'daily' | 'custom';
   startDate?: string;
   endDate?: string;
+  selectedYear?: number;
+  selectedMonth?: number;
+  selectedDay?: number;
 }
 
 export type ChartViewMode = 'daily' | 'monthly' | 'yearly';

@@ -33,8 +33,8 @@ export const CashflowChart: React.FC<CashflowChartProps> = ({ transactions }) =>
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [selectedMonth, setSelectedMonth] = useState<number>(currentMonth);
 
-  // ─── Monthly view: daily breakdown for the selected month ──────────────────
-  const monthlyChartData = useMemo(() => {
+  // ─── Daily view: daily breakdown for selected year/month ────────────────────
+  const dailyChartData = useMemo(() => {
     const year = selectedYear;
     const month = selectedMonth;
     const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -62,8 +62,8 @@ export const CashflowChart: React.FC<CashflowChartProps> = ({ transactions }) =>
     }));
   }, [transactions, selectedYear, selectedMonth]);
 
-  // ─── Yearly view: 12-month breakdown for selected year ─────────────────────
-  const yearlyChartData = useMemo(() => {
+  // ─── Yearly overview: 12-month breakdown for selected year ─────────────────────
+  const yearlyOverview = useMemo(() => {
     return getYearlySummary(selectedYear).months.map((m) => ({
       label: m.monthName,
       fullLabel: m.fullMonthName,
