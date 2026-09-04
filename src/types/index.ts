@@ -57,7 +57,7 @@ export interface FilterOptions {
   searchTerm: string;
   type: 'all' | 'income' | 'expense';
   categoryId: string;
-  period: 'all' | 'this_month' | 'last_month' | 'this_year' | 'daily' | 'custom';
+  period: 'all' | 'daily' | 'monthly' | 'yearly' | 'this_month' | 'last_month' | 'this_year' | 'custom';
   startDate?: string;
   endDate?: string;
   selectedYear?: number;

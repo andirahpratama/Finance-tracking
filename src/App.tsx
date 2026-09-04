@@ -55,27 +55,33 @@ export const App: React.FC = () => {
   const [isSavingsTargetModalOpen, setIsSavingsTargetModalOpen] = useState(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
-  // Filters state (Default to 'this_month' for isolated monthly history)
+  // Filters state (Default to 'monthly' with current date selections)
   const [filters, setFilters] = useState<FilterOptions>({
     searchTerm: '',
     type: 'all',
     categoryId: '',
-    period: 'this_month',
+    period: 'monthly',
+    selectedYear: new Date().getFullYear(),
+    selectedMonth: new Date().getMonth(),
+    selectedDay: new Date().getDate(),
   });
 
-  // Opening balance carried over from prior months ("Saldo dari bulan sebelumnya")
+  // Opening balance carried over from prior dates ("Saldo dari periode sebelumnya")
   const openingBalance = useMemo(() => {
     if (filters.period === 'all') return 0;
 
-    const now = new Date();
+    const year = filters.selectedYear ?? new Date().getFullYear();
+    const month = filters.selectedMonth ?? new Date().getMonth();
+    const day = filters.selectedDay ?? new Date().getDate();
+
     let cutoffDate: Date;
 
-    if (filters.period === 'this_month') {
-      cutoffDate = new Date(now.getFullYear(), now.getMonth(), 1);
-    } else if (filters.period === 'last_month') {
-      cutoffDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    } else if (filters.period === 'this_year') {
-      cutoffDate = new Date(now.getFullYear(), 0, 1);
+    if (filters.period === 'daily') {
+      cutoffDate = new Date(year, month, day);
+    } else if (filters.period === 'monthly' || filters.period === 'this_month' || filters.period === 'last_month') {
+      cutoffDate = new Date(year, month, 1);
+    } else if (filters.period === 'yearly' || filters.period === 'this_year') {
+      cutoffDate = new Date(year, 0, 1);
     } else {
       return 0;
     }
@@ -84,7 +90,12 @@ export const App: React.FC = () => {
     let priorExp = 0;
 
     transactions.forEach((t) => {
-      const txDate = new Date(t.date);
+      const parts = t.date.split('T')[0].split('-');
+      const txYear = parseInt(parts[0], 10);
+      const txMonth = parseInt(parts[1], 10) - 1;
+      const txDay = parseInt(parts[2], 10);
+      const txDate = new Date(txYear, txMonth, txDay);
+
       if (txDate < cutoffDate) {
         if (t.type === 'income') priorInc += Number(t.amount) || 0;
         else priorExp += Number(t.amount) || 0;
@@ -92,9 +103,13 @@ export const App: React.FC = () => {
     });
 
     return priorInc - priorExp;
-  }, [transactions, filters.period]);
+  }, [transactions, filters]);
 
   const filteredTransactions = useMemo(() => {
+    const year = filters.selectedYear ?? new Date().getFullYear();
+    const month = filters.selectedMonth ?? new Date().getMonth();
+    const day = filters.selectedDay ?? new Date().getDate();
+
     return transactions.filter((t) => {
       if (filters.searchTerm.trim()) {
         const query = filters.searchTerm.toLowerCase();
@@ -112,26 +127,26 @@ export const App: React.FC = () => {
       }
 
       if (filters.period !== 'all') {
-        const txDate = new Date(t.date);
-        const now = new Date();
+        const parts = t.date.split('T')[0].split('-');
+        const txYear = parseInt(parts[0], 10);
+        const txMonth = parseInt(parts[1], 10) - 1;
+        const txDay = parseInt(parts[2], 10);
 
-        if (filters.period === 'this_month') {
-          if (
-            txDate.getMonth() !== now.getMonth() ||
-            txDate.getFullYear() !== now.getFullYear()
-          ) {
+        if (filters.period === 'daily') {
+          if (txYear !== year || txMonth !== month || txDay !== day) {
+            return false;
+          }
+        } else if (filters.period === 'monthly' || filters.period === 'this_month') {
+          if (txYear !== year || txMonth !== month) {
             return false;
           }
         } else if (filters.period === 'last_month') {
-          const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-          if (
-            txDate.getMonth() !== lastMonth.getMonth() ||
-            txDate.getFullYear() !== lastMonth.getFullYear()
-          ) {
+          const lastMonth = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1);
+          if (txYear !== lastMonth.getFullYear() || txMonth !== lastMonth.getMonth()) {
             return false;
           }
-        } else if (filters.period === 'this_year') {
-          if (txDate.getFullYear() !== now.getFullYear()) {
+        } else if (filters.period === 'yearly' || filters.period === 'this_year') {
+          if (txYear !== year) {
             return false;
           }
         }

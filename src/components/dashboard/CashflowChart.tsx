@@ -14,26 +14,73 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { Transaction } from '../../types';
-import { formatCompactRupiah } from '../../lib/formatters';
+import { formatCompactRupiah, formatRupiah } from '../../lib/formatters';
 import { useFinance } from '../../context/FinanceContext';
-import { CalendarDays, BarChart3, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CalendarDays, BarChart3, ChevronLeft, ChevronRight, Sun } from 'lucide-react';
 
-type ChartTab = 'monthly' | 'yearly';
+type ChartTab = 'daily' | 'monthly' | 'yearly';
 
 interface CashflowChartProps {
   transactions: Transaction[];
 }
 
+const monthNames = [
+  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+];
+const monthShort = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+
 export const CashflowChart: React.FC<CashflowChartProps> = ({ transactions }) => {
-  const { monthlySavingsTarget, availableYears, getYearlySummary } = useFinance();
-  const currentYear = new Date().getFullYear();
-  const currentMonth = new Date().getMonth(); // 0-indexed
+  const { monthlySavingsTarget, getYearlySummary } = useFinance();
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth(); // 0-indexed
+  const currentDay = now.getDate();
 
   const [tab, setTab] = useState<ChartTab>('monthly');
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [selectedMonth, setSelectedMonth] = useState<number>(currentMonth);
+  const [selectedDay, setSelectedDay] = useState<number>(currentDay);
 
-  // ─── Daily view: daily breakdown for selected year/month ────────────────────
+  // ─── 1. Daily View: Data for the selected specific day ─────────────────────
+  const dailySpecificData = useMemo(() => {
+    const year = selectedYear;
+    const month = selectedMonth;
+    const day = selectedDay;
+
+    const dayTx = transactions.filter((t) => {
+      const parts = t.date.split('T')[0].split('-');
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      const d = parseInt(parts[2], 10);
+      return y === year && m === month && d === day;
+    });
+
+    const inc = dayTx.filter((t) => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
+    const exp = dayTx.filter((t) => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
+
+    const catMap: Record<string, { label: string; income: number; expense: number }> = {};
+    dayTx.forEach((t) => {
+      const catName = t.category_name || 'Lainnya';
+      if (!catMap[catName]) {
+        catMap[catName] = { label: catName, income: 0, expense: 0 };
+      }
+      if (t.type === 'income') catMap[catName].income += Number(t.amount);
+      else catMap[catName].expense += Number(t.amount);
+    });
+
+    return {
+      transactions: dayTx,
+      totalIncome: inc,
+      totalExpense: exp,
+      net: inc - exp,
+      chartData: Object.values(catMap),
+      hasData: dayTx.length > 0,
+    };
+  }, [transactions, selectedYear, selectedMonth, selectedDay]);
+
+  // ─── 2. Monthly View: daily breakdown for selected year/month ──────────────
   const dailyChartData = useMemo(() => {
     const year = selectedYear;
     const month = selectedMonth;
@@ -45,12 +92,14 @@ export const CashflowChart: React.FC<CashflowChartProps> = ({ transactions }) =>
     }
 
     transactions.forEach((t) => {
-      const d = new Date(t.date);
-      if (d.getFullYear() === year && d.getMonth() === month) {
-        const day = d.getDate();
+      const parts = t.date.split('T')[0].split('-');
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      const d = parseInt(parts[2], 10);
+      if (y === year && m === month && dayMap[d]) {
         const amt = Number(t.amount);
-        if (t.type === 'income') dayMap[day].income += amt;
-        else dayMap[day].expense += amt;
+        if (t.type === 'income') dayMap[d].income += amt;
+        else dayMap[d].expense += amt;
       }
     });
 
@@ -62,7 +111,7 @@ export const CashflowChart: React.FC<CashflowChartProps> = ({ transactions }) =>
     }));
   }, [transactions, selectedYear, selectedMonth]);
 
-  // ─── Yearly overview: 12-month breakdown for selected year ─────────────────────
+  // ─── 3. Yearly View: 12-month breakdown for selected year ──────────────────
   const yearlyOverview = useMemo(() => {
     return getYearlySummary(selectedYear).months.map((m) => ({
       label: m.monthName,
@@ -76,34 +125,45 @@ export const CashflowChart: React.FC<CashflowChartProps> = ({ transactions }) =>
     }));
   }, [getYearlySummary, selectedYear]);
 
-  // ─── Year-over-year comparison (for yearly summary cards) ──────────────────
   const yearlySummary = useMemo(() => getYearlySummary(selectedYear), [getYearlySummary, selectedYear]);
 
-  const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-  const monthShort = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  // Navigation handlers (Klik Panah)
+  const prevDay = () => {
+    const d = new Date(selectedYear, selectedMonth, selectedDay - 1);
+    setSelectedYear(d.getFullYear());
+    setSelectedMonth(d.getMonth());
+    setSelectedDay(d.getDate());
+  };
 
-  // Navigation helpers
+  const nextDay = () => {
+    const d = new Date(selectedYear, selectedMonth, selectedDay + 1);
+    setSelectedYear(d.getFullYear());
+    setSelectedMonth(d.getMonth());
+    setSelectedDay(d.getDate());
+  };
+
   const prevMonth = () => {
-    if (selectedMonth === 0) { setSelectedMonth(11); setSelectedYear(y => y - 1); }
-    else setSelectedMonth(m => m - 1);
+    if (selectedMonth === 0) {
+      setSelectedMonth(11);
+      setSelectedYear((y) => y - 1);
+    } else {
+      setSelectedMonth((m) => m - 1);
+    }
   };
+
   const nextMonth = () => {
-    const now = new Date();
-    if (selectedYear === now.getFullYear() && selectedMonth === now.getMonth()) return;
-    if (selectedMonth === 11) { setSelectedMonth(0); setSelectedYear(y => y + 1); }
-    else setSelectedMonth(m => m + 1);
-  };
-  const prevYear = () => setSelectedYear(y => y - 1);
-  const nextYear = () => {
-    if (selectedYear >= currentYear) return;
-    setSelectedYear(y => y + 1);
+    if (selectedMonth === 11) {
+      setSelectedMonth(0);
+      setSelectedYear((y) => y + 1);
+    } else {
+      setSelectedMonth((m) => m + 1);
+    }
   };
 
-  const isCurrentMonthOrFuture = selectedYear === new Date().getFullYear() && selectedMonth === new Date().getMonth();
-  const isCurrentYear = selectedYear >= currentYear;
+  const prevYear = () => setSelectedYear((y) => y - 1);
+  const nextYear = () => setSelectedYear((y) => y + 1);
 
-  // ─── Tooltips ──────────────────────────────────────────────────────────────
+  // Tooltips
   const MonthlyTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
     const inc = payload.find((p: any) => p.dataKey === 'income')?.value || 0;
@@ -184,8 +244,11 @@ export const CashflowChart: React.FC<CashflowChartProps> = ({ transactions }) =>
     );
   };
 
-  const hasMonthlyData = dailyChartData.some(d => d.income > 0 || d.expense > 0);
-  const hasYearlyData = yearlyOverview.some(d => d.hasData);
+  const hasMonthlyData = dailyChartData.some((d) => d.income > 0 || d.expense > 0);
+  const hasYearlyData = yearlyOverview.some((d) => d.hasData);
+
+  const selectedDayObj = new Date(selectedYear, selectedMonth, selectedDay);
+  const dayNameStr = dayNames[selectedDayObj.getDay()];
 
   return (
     <div className="rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 overflow-hidden shadow-sm dark:shadow-xl backdrop-blur-xl">
@@ -193,12 +256,23 @@ export const CashflowChart: React.FC<CashflowChartProps> = ({ transactions }) =>
       <div className="px-5 pt-5 pb-4 border-b border-slate-100 dark:border-slate-800/60">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Grafik Arus Kas</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Visualisasi pemasukan & pengeluaran</p>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Grafik Rekap Arus Kas</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Visualisasi per harian, bulanan & tahunan</p>
           </div>
 
-          {/* Tab Switcher */}
+          {/* Tab Switcher: Harian | Bulanan | Tahunan */}
           <div className="flex items-center bg-slate-100 dark:bg-slate-800/80 rounded-xl p-1 gap-1 self-start sm:self-auto">
+            <button
+              onClick={() => setTab('daily')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                tab === 'daily'
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+              }`}
+            >
+              <Sun className="w-3.5 h-3.5" />
+              Harian
+            </button>
             <button
               onClick={() => setTab('monthly')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
@@ -224,91 +298,151 @@ export const CashflowChart: React.FC<CashflowChartProps> = ({ transactions }) =>
           </div>
         </div>
 
-        {/* Period Navigator */}
-        <div className="mt-3 flex items-center justify-between">
-          {tab === 'monthly' ? (
-            <div className="flex items-center gap-2">
+        {/* Period Navigator: Klik Panah (Tanpa Dropdown) */}
+        <div className="mt-3 flex items-center justify-between bg-slate-50 dark:bg-slate-900/60 p-2 rounded-xl border border-slate-200/80 dark:border-slate-800">
+          {tab === 'daily' && (
+            <div className="flex items-center justify-between w-full">
+              <button
+                onClick={prevDay}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 text-xs font-semibold shadow-sm transition-all"
+              >
+                <ChevronLeft className="w-4 h-4 text-emerald-500" />
+                <span className="hidden sm:inline">Hari Sebelumnya</span>
+              </button>
+
+              <span className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white text-center">
+                {dayNameStr}, {selectedDay} {monthNames[selectedMonth]} {selectedYear}
+              </span>
+
+              <button
+                onClick={nextDay}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 text-xs font-semibold shadow-sm transition-all"
+              >
+                <span className="hidden sm:inline">Hari Selanjutnya</span>
+                <ChevronRight className="w-4 h-4 text-emerald-500" />
+              </button>
+            </div>
+          )}
+
+          {tab === 'monthly' && (
+            <div className="flex items-center justify-between w-full">
               <button
                 onClick={prevMonth}
-                className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 text-xs font-semibold shadow-sm transition-all"
               >
-                <ChevronLeft className="w-4 h-4" />
+                <ChevronLeft className="w-4 h-4 text-emerald-500" />
+                <span className="hidden sm:inline">Bulan Sebelumnya</span>
               </button>
-              <span className="text-sm font-bold text-slate-900 dark:text-white min-w-[160px] text-center">
+
+              <span className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white text-center">
                 {monthNames[selectedMonth]} {selectedYear}
               </span>
+
               <button
                 onClick={nextMonth}
-                disabled={isCurrentMonthOrFuture}
-                className={`p-1.5 rounded-lg transition-colors ${
-                  isCurrentMonthOrFuture
-                    ? 'opacity-30 cursor-not-allowed'
-                    : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400'
-                }`}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 text-xs font-semibold shadow-sm transition-all"
               >
-                <ChevronRight className="w-4 h-4" />
+                <span className="hidden sm:inline">Bulan Selanjutnya</span>
+                <ChevronRight className="w-4 h-4 text-emerald-500" />
               </button>
-              {/* Month quick-select */}
-              <div className="hidden sm:flex items-center gap-1 ml-2">
-                {monthShort.map((m, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setSelectedMonth(i)}
-                    className={`px-2 py-0.5 rounded-md text-[11px] font-semibold transition-all ${
-                      i === selectedMonth
-                        ? 'bg-emerald-500 text-white'
-                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </div>
             </div>
-          ) : (
-            <div className="flex items-center gap-2">
+          )}
+
+          {tab === 'yearly' && (
+            <div className="flex items-center justify-between w-full">
               <button
                 onClick={prevYear}
-                className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 text-xs font-semibold shadow-sm transition-all"
               >
-                <ChevronLeft className="w-4 h-4" />
+                <ChevronLeft className="w-4 h-4 text-emerald-500" />
+                <span className="hidden sm:inline">Tahun Sebelumnya</span>
               </button>
-              <span className="text-sm font-bold text-slate-900 dark:text-white min-w-[60px] text-center">
-                {selectedYear}
+
+              <span className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white text-center">
+                Tahun {selectedYear}
               </span>
+
               <button
                 onClick={nextYear}
-                disabled={isCurrentYear}
-                className={`p-1.5 rounded-lg transition-colors ${
-                  isCurrentYear
-                    ? 'opacity-30 cursor-not-allowed'
-                    : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400'
-                }`}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 text-xs font-semibold shadow-sm transition-all"
               >
-                <ChevronRight className="w-4 h-4" />
+                <span className="hidden sm:inline">Tahun Selanjutnya</span>
+                <ChevronRight className="w-4 h-4 text-emerald-500" />
               </button>
-              {/* Year quick-select pills */}
-              <div className="flex items-center gap-1 ml-2 flex-wrap">
-                {availableYears.map((y) => (
-                  <button
-                    key={y}
-                    onClick={() => setSelectedYear(y)}
-                    className={`px-2.5 py-0.5 rounded-md text-[11px] font-semibold transition-all ${
-                      y === selectedYear
-                        ? 'bg-emerald-500 text-white'
-                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    {y}
-                  </button>
-                ))}
-              </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* ── MONTHLY CHART ── */}
+      {/* ── 1. HARIAN CHART ── */}
+      {tab === 'daily' && (
+        <div className="p-5">
+          {/* Summary Pills */}
+          <div className="grid grid-cols-3 gap-3 mb-5">
+            <div className="rounded-xl p-3 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400 mb-1">
+                Pemasukan Hari Ini
+              </p>
+              <p className="text-sm font-extrabold text-emerald-700 dark:text-emerald-300">
+                {formatRupiah(dailySpecificData.totalIncome)}
+              </p>
+            </div>
+
+            <div className="rounded-xl p-3 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-rose-600 dark:text-rose-400 mb-1">
+                Pengeluaran Hari Ini
+              </p>
+              <p className="text-sm font-extrabold text-rose-700 dark:text-rose-300">
+                {formatRupiah(dailySpecificData.totalExpense)}
+              </p>
+            </div>
+
+            <div
+              className={`rounded-xl p-3 border ${
+                dailySpecificData.net >= 0
+                  ? 'bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20'
+                  : 'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/20'
+              }`}
+            >
+              <p
+                className={`text-[10px] font-semibold uppercase tracking-wide mb-1 ${
+                  dailySpecificData.net >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-rose-600 dark:text-rose-400'
+                }`}
+              >
+                Selisih Bersih
+              </p>
+              <p
+                className={`text-sm font-extrabold ${
+                  dailySpecificData.net >= 0 ? 'text-blue-700 dark:text-blue-300' : 'text-rose-700 dark:text-rose-300'
+                }`}
+              >
+                {formatRupiah(Math.abs(dailySpecificData.net))}
+              </p>
+            </div>
+          </div>
+
+          {!dailySpecificData.hasData ? (
+            <div className="flex flex-col items-center justify-center h-48 gap-3">
+              <Sun className="w-10 h-10 text-slate-300 dark:text-slate-600" />
+              <p className="text-sm text-slate-400 dark:text-slate-500">Belum ada transaksi pada tanggal ini</p>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={dailySpecificData.chartData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-slate-200 dark:text-slate-700/50" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'currentColor' }} className="text-slate-500 dark:text-slate-400" axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: 'currentColor' }} className="text-slate-500 dark:text-slate-400" axisLine={false} tickLine={false} tickFormatter={formatCompactRupiah} width={60} />
+                <Tooltip />
+                <Bar dataKey="income" name="Pemasukan" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={24} />
+                <Bar dataKey="expense" name="Pengeluaran" fill="#F43F5E" radius={[4, 4, 0, 0]} maxBarSize={24} />
+                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '12px' }} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      )}
+
+      {/* ── 2. BULANAN CHART ── */}
       {tab === 'monthly' && (
         <div className="p-5">
           {!hasMonthlyData ? (
@@ -379,7 +513,7 @@ export const CashflowChart: React.FC<CashflowChartProps> = ({ transactions }) =>
                   <Bar dataKey="expense" name="Pengeluaran" fill="url(#expGradM)" radius={[3, 3, 0, 0]} maxBarSize={16} />
                   <Legend
                     wrapperStyle={{ fontSize: '11px', paddingTop: '12px' }}
-                    formatter={(value) => value === 'income' ? 'Pemasukan' : 'Pengeluaran'}
+                    formatter={(value) => (value === 'income' ? 'Pemasukan' : 'Pengeluaran')}
                   />
                 </BarChart>
               </ResponsiveContainer>
@@ -388,7 +522,7 @@ export const CashflowChart: React.FC<CashflowChartProps> = ({ transactions }) =>
         </div>
       )}
 
-      {/* ── YEARLY CHART ── */}
+      {/* ── 3. TAHUNAN CHART ── */}
       {tab === 'yearly' && (
         <div className="p-5">
           {/* Yearly KPI summary */}
@@ -397,7 +531,12 @@ export const CashflowChart: React.FC<CashflowChartProps> = ({ transactions }) =>
               { label: 'Total Pemasukan', val: yearlySummary.totalIncome, color: 'emerald' },
               { label: 'Total Pengeluaran', val: yearlySummary.totalExpense, color: 'rose' },
               { label: 'Total Tabungan', val: yearlySummary.totalSavings, color: yearlySummary.totalSavings >= 0 ? 'blue' : 'rose' },
-              { label: 'Capai Target', val: null, pct: yearlySummary.targetAchievementRate, color: yearlySummary.targetAchievementRate >= 100 ? 'emerald' : yearlySummary.targetAchievementRate >= 50 ? 'amber' : 'rose' },
+              {
+                label: 'Capai Target',
+                val: null,
+                pct: yearlySummary.targetAchievementRate,
+                color: yearlySummary.targetAchievementRate >= 100 ? 'emerald' : yearlySummary.targetAchievementRate >= 50 ? 'amber' : 'rose',
+              },
             ].map((item) => (
               <div
                 key={item.label}
@@ -461,7 +600,7 @@ export const CashflowChart: React.FC<CashflowChartProps> = ({ transactions }) =>
                   <Bar dataKey="expense" name="Pengeluaran" fill="url(#expGradY)" radius={[3, 3, 0, 0]} maxBarSize={20} />
                   <Legend
                     wrapperStyle={{ fontSize: '11px', paddingTop: '12px' }}
-                    formatter={(value) => value === 'income' ? 'Pemasukan' : 'Pengeluaran'}
+                    formatter={(value) => (value === 'income' ? 'Pemasukan' : 'Pengeluaran')}
                   />
                 </BarChart>
               </ResponsiveContainer>
