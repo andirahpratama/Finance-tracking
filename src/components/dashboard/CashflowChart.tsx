@@ -184,8 +184,8 @@ export const CashflowChart: React.FC<CashflowChartProps> = ({ transactions }) =>
     );
   };
 
-  const hasMonthlyData = monthlyChartData.some(d => d.income > 0 || d.expense > 0);
-  const hasYearlyData = yearlyChartData.some(d => d.hasData);
+  const hasMonthlyData = dailyChartData.some(d => d.income > 0 || d.expense > 0);
+  const hasYearlyData = yearlyOverview.some(d => d.hasData);
 
   return (
     <div className="rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 overflow-hidden shadow-sm dark:shadow-xl backdrop-blur-xl">
@@ -321,12 +321,12 @@ export const CashflowChart: React.FC<CashflowChartProps> = ({ transactions }) =>
               {/* Summary pills */}
               <div className="grid grid-cols-3 gap-3 mb-5">
                 {[
-                  { label: 'Total Pemasukan', val: monthlyChartData.reduce((s, d) => s + d.income, 0), color: 'emerald' },
-                  { label: 'Total Pengeluaran', val: monthlyChartData.reduce((s, d) => s + d.expense, 0), color: 'rose' },
+                  { label: 'Total Pemasukan', val: dailyChartData.reduce((s, d) => s + d.income, 0), color: 'emerald' },
+                  { label: 'Total Pengeluaran', val: dailyChartData.reduce((s, d) => s + d.expense, 0), color: 'rose' },
                   {
                     label: 'Selisih Bersih',
-                    val: monthlyChartData.reduce((s, d) => s + d.net, 0),
-                    color: monthlyChartData.reduce((s, d) => s + d.net, 0) >= 0 ? 'blue' : 'rose',
+                    val: dailyChartData.reduce((s, d) => s + d.net, 0),
+                    color: dailyChartData.reduce((s, d) => s + d.net, 0) >= 0 ? 'blue' : 'rose',
                   },
                 ].map((item) => (
                   <div
@@ -344,7 +344,7 @@ export const CashflowChart: React.FC<CashflowChartProps> = ({ transactions }) =>
               </div>
 
               <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={monthlyChartData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }} barGap={2}>
+                <BarChart data={dailyChartData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }} barGap={2}>
                   <defs>
                     <linearGradient id="incGradM" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#10B981" stopOpacity={0.9} />
@@ -429,7 +429,7 @@ export const CashflowChart: React.FC<CashflowChartProps> = ({ transactions }) =>
               {/* Bar chart: income vs expense per month */}
               <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">Pemasukan vs Pengeluaran per Bulan</p>
               <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={yearlyChartData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }} barGap={2}>
+                <BarChart data={yearlyOverview} margin={{ top: 5, right: 5, left: 0, bottom: 5 }} barGap={2}>
                   <defs>
                     <linearGradient id="incGradY" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#10B981" stopOpacity={0.9} />
@@ -469,7 +469,7 @@ export const CashflowChart: React.FC<CashflowChartProps> = ({ transactions }) =>
               {/* Area chart: cumulative savings vs target */}
               <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-5 mb-2">Akumulasi Tabungan vs Target</p>
               <ResponsiveContainer width="100%" height={200}>
-                <AreaChart data={yearlyChartData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+                <AreaChart data={yearlyOverview} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
                   <defs>
                     <linearGradient id="cumSavingsGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#06B6D4" stopOpacity={0.35} />

@@ -1,4 +1,4 @@
-import { Search, Download, Printer, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Download, Printer } from 'lucide-react';
 import { Category, FilterOptions } from '../../types';
 
 interface TransactionFilterProps {
