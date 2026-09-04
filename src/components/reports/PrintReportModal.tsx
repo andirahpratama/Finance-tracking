@@ -10,51 +10,74 @@ interface PrintReportModalProps {
   onClose: () => void;
 }
 
+type ReportPeriodType = 'daily' | 'this_month' | 'specific_month' | 'yearly' | 'all';
+
 export const PrintReportModal: React.FC<PrintReportModalProps> = ({ isOpen, onClose }) => {
   const { transactions, availableYears } = useFinance();
 
-  const currentYear = new Date().getFullYear();
-  const currentMonth = new Date().getMonth();
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth();
+  const currentDay = now.getDate();
 
-  const [periodType, setPeriodType] = useState<'this_month' | 'specific_month' | 'yearly'>('this_month');
+  const [periodType, setPeriodType] = useState<ReportPeriodType>('this_month');
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [selectedMonthIndex, setSelectedMonthIndex] = useState<number>(currentMonth);
+  const [selectedDay, setSelectedDay] = useState<number>(currentDay);
 
   const monthNames = [
     'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
     'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
   ];
 
+  const daysInSelectedMonth = new Date(selectedYear, selectedMonthIndex + 1, 0).getDate();
+
   const handlePrint = () => {
     let filtered: Transaction[] = [];
     let periodTitle = '';
 
-    if (periodType === 'this_month') {
-      const now = new Date();
+    if (periodType === 'daily') {
       filtered = transactions.filter((t) => {
-        const d = new Date(t.date);
-        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        const parts = t.date.split('T')[0].split('-');
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10) - 1;
+        const d = parseInt(parts[2], 10);
+        return y === selectedYear && m === selectedMonthIndex && d === selectedDay;
       });
-      periodTitle = `${monthNames[now.getMonth()]} ${now.getFullYear()}`;
+      periodTitle = `Harian (${selectedDay} ${monthNames[selectedMonthIndex]} ${selectedYear})`;
+    } else if (periodType === 'this_month') {
+      filtered = transactions.filter((t) => {
+        const parts = t.date.split('T')[0].split('-');
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10) - 1;
+        return y === now.getFullYear() && m === now.getMonth();
+      });
+      periodTitle = `Bulanan (${monthNames[now.getMonth()]} ${now.getFullYear()})`;
     } else if (periodType === 'specific_month') {
       filtered = transactions.filter((t) => {
-        const d = new Date(t.date);
-        return d.getMonth() === selectedMonthIndex && d.getFullYear() === selectedYear;
+        const parts = t.date.split('T')[0].split('-');
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10) - 1;
+        return y === selectedYear && m === selectedMonthIndex;
       });
-      periodTitle = `${monthNames[selectedMonthIndex]} ${selectedYear}`;
-    } else {
+      periodTitle = `Bulanan (${monthNames[selectedMonthIndex]} ${selectedYear})`;
+    } else if (periodType === 'yearly') {
       filtered = transactions.filter((t) => {
-        const d = new Date(t.date);
-        return d.getFullYear() === selectedYear;
+        const parts = t.date.split('T')[0].split('-');
+        const y = parseInt(parts[0], 10);
+        return y === selectedYear;
       });
-      periodTitle = `Tahun ${selectedYear}`;
+      periodTitle = `Tahunan (Tahun ${selectedYear})`;
+    } else {
+      filtered = transactions;
+      periodTitle = 'Semua Waktu';
     }
 
     let inc = 0;
     let exp = 0;
     filtered.forEach((t) => {
-      if (t.type === 'income') inc += t.amount;
-      else exp += t.amount;
+      if (t.type === 'income') inc += Number(t.amount);
+      else exp += Number(t.amount);
     });
 
     printFinancialReport(filtered, {
@@ -62,6 +85,10 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({ isOpen, onCl
       totalExpense: exp,
       totalBalance: inc - exp,
       monthName: periodTitle,
+      periodType: periodType === 'daily' ? 'daily' : periodType === 'yearly' ? 'yearly' : 'this_month',
+      year: selectedYear,
+      monthIndex: selectedMonthIndex,
+      day: selectedDay,
     });
 
     onClose();
@@ -92,8 +119,8 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({ isOpen, onCl
                   <Printer className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-base font-extrabold text-slate-900 dark:text-white">Cetak Laporan PDF</h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Pilih periode laporan untuk dicetak</p>
+                  <h2 className="text-base font-extrabold text-slate-900 dark:text-white">Cetak Laporan PDF + Grafik</h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Termasuk visualisasi grafik harian, bulanan & tahunan</p>
                 </div>
               </div>
               <button
@@ -113,8 +140,20 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({ isOpen, onCl
               <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
+                  onClick={() => setPeriodType('daily')}
+                  className={`py-2 px-2.5 rounded-xl text-xs font-bold border transition-all ${
+                    periodType === 'daily'
+                      ? 'bg-purple-600 text-white border-purple-600 shadow-md shadow-purple-600/20'
+                      : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                  }`}
+                >
+                  Harian
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => setPeriodType('this_month')}
-                  className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all ${
+                  className={`py-2 px-2.5 rounded-xl text-xs font-bold border transition-all ${
                     periodType === 'this_month'
                       ? 'bg-purple-600 text-white border-purple-600 shadow-md shadow-purple-600/20'
                       : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
@@ -126,7 +165,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({ isOpen, onCl
                 <button
                   type="button"
                   onClick={() => setPeriodType('specific_month')}
-                  className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all ${
+                  className={`py-2 px-2.5 rounded-xl text-xs font-bold border transition-all ${
                     periodType === 'specific_month'
                       ? 'bg-purple-600 text-white border-purple-600 shadow-md shadow-purple-600/20'
                       : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
@@ -138,7 +177,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({ isOpen, onCl
                 <button
                   type="button"
                   onClick={() => setPeriodType('yearly')}
-                  className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all ${
+                  className={`py-2 px-2.5 rounded-xl text-xs font-bold border transition-all ${
                     periodType === 'yearly'
                       ? 'bg-purple-600 text-white border-purple-600 shadow-md shadow-purple-600/20'
                       : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
@@ -146,7 +185,69 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({ isOpen, onCl
                 >
                   Tahunan
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPeriodType('all')}
+                  className={`py-2 px-2.5 rounded-xl text-xs font-bold border transition-all col-span-2 ${
+                    periodType === 'all'
+                      ? 'bg-purple-600 text-white border-purple-600 shadow-md shadow-purple-600/20'
+                      : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                  }`}
+                >
+                  Semua Waktu
+                </button>
               </div>
+
+              {/* Harian Selector */}
+              {periodType === 'daily' && (
+                <div className="grid grid-cols-3 gap-2 pt-1">
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-500 block mb-1">Tanggal</label>
+                    <select
+                      value={selectedDay}
+                      onChange={(e) => setSelectedDay(Number(e.target.value))}
+                      className="w-full p-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
+                    >
+                      {Array.from({ length: daysInSelectedMonth }, (_, i) => i + 1).map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-500 block mb-1">Bulan</label>
+                    <select
+                      value={selectedMonthIndex}
+                      onChange={(e) => setSelectedMonthIndex(Number(e.target.value))}
+                      className="w-full p-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
+                    >
+                      {monthNames.map((m, idx) => (
+                        <option key={m} value={idx}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-500 block mb-1">Tahun</label>
+                    <select
+                      value={selectedYear}
+                      onChange={(e) => setSelectedYear(Number(e.target.value))}
+                      className="w-full p-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
+                    >
+                      {availableYears.map((yr) => (
+                        <option key={yr} value={yr}>
+                          {yr}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
 
               {/* Month & Year Selectors */}
               {periodType === 'specific_month' && (
@@ -214,10 +315,10 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({ isOpen, onCl
               <button
                 type="button"
                 onClick={handlePrint}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-lg shadow-purple-600/20"
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-lg shadow-purple-600/20 transition-all active:scale-95"
               >
                 <Printer className="w-4 h-4" />
-                Cetak PDF Laporan
+                Cetak PDF + Grafik
               </button>
             </div>
           </motion.div>
