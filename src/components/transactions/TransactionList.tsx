@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Edit2, Trash2, Calendar, AlertCircle, BookmarkCheck } from 'lucide-react';
 import { Transaction } from '../../types';
@@ -9,7 +10,7 @@ interface TransactionListProps {
   transactions: Transaction[];
   openingBalance?: number;
   onEdit: (transaction: Transaction) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => Promise<{ error: string | null }> | void;
   onAddNew: () => void;
 }
 
@@ -22,8 +23,8 @@ export const TransactionList: React.FC<TransactionListProps> = ({
 }) => {
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const confirmDelete = (id: string) => {
-    onDelete(id);
+  const confirmDelete = async (id: string) => {
+    await onDelete(id);
     setDeleteId(null);
   };
 
@@ -175,47 +176,51 @@ export const TransactionList: React.FC<TransactionListProps> = ({
       </AnimatePresence>
 
       {/* Delete Confirmation Modal */}
-      <AnimatePresence>
-        {deleteId && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setDeleteId(null)}
-              className="fixed inset-0 bg-slate-950/60 dark:bg-slate-950/80 backdrop-blur-sm"
-            />
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="relative w-full max-w-sm rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 shadow-2xl z-10 text-center"
-            >
-              <div className="w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto mb-3">
-                <AlertCircle className="w-6 h-6" />
-              </div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1">Hapus Transaksi?</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mb-5">
-                Apakah Anda yakin ingin menghapus catatan transaksi ini? Tindakan ini tidak dapat dibatalkan.
-              </p>
-              <div className="flex gap-2">
-                <button
+      {typeof document !== 'undefined' &&
+        createPortal(
+          <AnimatePresence>
+            {deleteId && (
+              <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
                   onClick={() => setDeleteId(null)}
-                  className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  className="fixed inset-0 bg-slate-950/60 dark:bg-slate-950/80 backdrop-blur-sm"
+                />
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.9, opacity: 0 }}
+                  className="relative w-full max-w-sm rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 shadow-2xl z-10 text-center"
                 >
-                  Batal
-                </button>
-                <button
-                  onClick={() => confirmDelete(deleteId)}
-                  className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold transition-colors"
-                >
-                  Ya, Hapus
-                </button>
+                  <div className="w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto mb-3">
+                    <AlertCircle className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1">Hapus Transaksi?</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-5">
+                    Apakah Anda yakin ingin menghapus catatan transaksi ini? Tindakan ini tidak dapat dibatalkan.
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setDeleteId(null)}
+                      className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      onClick={() => confirmDelete(deleteId)}
+                      className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold transition-colors"
+                    >
+                      Ya, Hapus
+                    </button>
+                  </div>
+                </motion.div>
               </div>
-            </motion.div>
-          </div>
+            )}
+          </AnimatePresence>,
+          document.body
         )}
-      </AnimatePresence>
     </div>
   );
 };

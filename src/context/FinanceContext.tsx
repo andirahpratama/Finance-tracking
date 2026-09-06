@@ -470,6 +470,31 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!user) return { error: 'Pengguna belum login' };
     const selectedCategory = tx.category_id ? categories.find(c => c.id === tx.category_id) : undefined;
 
+    if (configured && supabase && !isGuest) {
+      try {
+        const updatePayload: any = {};
+        if (tx.category_id !== undefined) updatePayload.category_id = tx.category_id;
+        if (tx.type !== undefined) updatePayload.type = tx.type;
+        if (tx.amount !== undefined) updatePayload.amount = tx.amount;
+        if (tx.date !== undefined) updatePayload.date = tx.date;
+        if (tx.notes !== undefined) updatePayload.notes = tx.notes;
+
+        const { error } = await supabase
+          .from('transactions')
+          .update(updatePayload)
+          .eq('id', id)
+          .eq('user_id', user.id);
+
+        if (error) {
+          console.error('Error updating transaction in Supabase:', error);
+          return { error: error.message };
+        }
+      } catch (err: any) {
+        console.error('Error updating transaction:', err);
+        return { error: err.message || 'Gagal mengupdate transaksi' };
+      }
+    }
+
     const updated = transactions.map(t => {
       if (t.id === id) {
         return {
@@ -491,6 +516,25 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const deleteTransaction = async (id: string) => {
     if (!user) return { error: 'Pengguna belum login' };
+
+    if (configured && supabase && !isGuest) {
+      try {
+        const { error } = await supabase
+          .from('transactions')
+          .delete()
+          .eq('id', id)
+          .eq('user_id', user.id);
+
+        if (error) {
+          console.error('Error deleting transaction from Supabase:', error);
+          return { error: error.message };
+        }
+      } catch (err: any) {
+        console.error('Error deleting transaction:', err);
+        return { error: err.message || 'Gagal menghapus transaksi dari database' };
+      }
+    }
+
     const updated = transactions.filter(t => t.id !== id);
     setTransactions(updated);
     localStorage.setItem(getStorageKey('transactions'), JSON.stringify(updated));
