@@ -55,7 +55,7 @@ export interface MascotState {
 
 export interface FilterOptions {
   searchTerm: string;
-  type: 'all' | 'income' | 'expense';
+  type: 'all' | 'income' | 'expense' | 'savings';
   categoryId: string;
   period: 'all' | 'daily' | 'monthly' | 'yearly' | 'this_month' | 'last_month' | 'this_year' | 'custom';
   startDate?: string;

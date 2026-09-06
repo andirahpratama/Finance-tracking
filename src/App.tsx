@@ -121,8 +121,16 @@ export const App: React.FC = () => {
         if (!matchNotes && !matchCategory) return false;
       }
 
-      if (filters.type !== 'all' && t.type !== filters.type) {
-        return false;
+      if (filters.type !== 'all') {
+        if (filters.type === 'savings') {
+          const isSavings =
+            (t.category_name || '').toLowerCase().includes('tabungan') ||
+            (t.notes || '').toLowerCase().includes('tabungan') ||
+            t.category_icon === 'PiggyBank';
+          if (!isSavings) return false;
+        } else if (t.type !== filters.type) {
+          return false;
+        }
       }
 
       if (filters.categoryId && t.category_id !== filters.categoryId) {

@@ -182,6 +182,16 @@ export const TransactionFilter: React.FC<TransactionFilterProps> = ({
             >
               Pengeluaran
             </button>
+            <button
+              onClick={() => onFilterChange({ ...filters, type: 'savings' })}
+              className={`px-2.5 sm:px-3 py-1 rounded-lg font-medium transition-all ${
+                filters.type === 'savings'
+                  ? 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-300 font-bold border border-cyan-500/30'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+            >
+              Tabungan
+            </button>
           </div>
 
           {/* Category Filter Select */}

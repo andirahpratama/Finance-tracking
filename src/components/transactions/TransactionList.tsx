@@ -116,15 +116,38 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                     <span className="font-bold text-slate-900 dark:text-white text-sm sm:text-base leading-snug break-words">
                       {t.category_name || 'Lainnya'}
                     </span>
-                    <span
-                      className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border shrink-0 ${
-                        isIncome
-                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border-emerald-500/20'
-                          : 'bg-rose-500/10 text-rose-600 dark:text-rose-300 border-rose-500/20'
-                      }`}
-                    >
-                      {isIncome ? 'Pemasukan' : 'Pengeluaran'}
-                    </span>
+                    {(() => {
+                      const isSavings =
+                        (t.category_name || '').toLowerCase().includes('tabungan') ||
+                        (t.notes || '').toLowerCase().includes('tabungan') ||
+                        t.category_icon === 'PiggyBank';
+
+                      if (isSavings) {
+                        return (
+                          <span
+                            className={`text-[10px] px-2 py-0.5 rounded-full font-bold border shrink-0 ${
+                              isIncome
+                                ? 'bg-amber-500/10 text-amber-600 dark:text-amber-300 border-amber-500/20'
+                                : 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-300 border-cyan-500/20'
+                            }`}
+                          >
+                            {isIncome ? 'Tarik Tabungan (+)' : 'Setor Tabungan (-)'}
+                          </span>
+                        );
+                      }
+
+                      return (
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border shrink-0 ${
+                            isIncome
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border-emerald-500/20'
+                              : 'bg-rose-500/10 text-rose-600 dark:text-rose-300 border-rose-500/20'
+                          }`}
+                        >
+                          {isIncome ? 'Pemasukan' : 'Pengeluaran'}
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
