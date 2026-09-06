@@ -315,21 +315,38 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const newVal = action === 'deposit' ? currentVal + amount : Math.max(0, currentVal - amount);
     await updateSavingsTargetItem(targetId, { current_amount: newVal });
 
-    // Also record a transaction so main history remains accurate
-    // Setor tabungan => Pengeluaran dari dompet utama ke Tabungan
-    // Tarik tabungan => Pemasukan ke dompet utama dari Tabungan
+    // Transaction direction:
+    // Setor ke Tabungan => Pengeluaran (expense) dari dompet utama ke Tabungan (target savings balance increases)
+    // Tarik Tabungan => Pemasukan (income) ke dompet utama dari Tabungan (target savings balance decreases)
     const txType: TransactionType = action === 'deposit' ? 'expense' : 'income';
 
-    let savingsCategory = categories.find(c => c.name.toLowerCase().includes('tabungan'));
+    let savingsCategory = categories.find(c => c.type === txType && c.name.toLowerCase().includes('tabungan'));
     if (!savingsCategory) {
-      savingsCategory = categories[0];
+      savingsCategory = categories.find(c => c.name.toLowerCase().includes('tabungan'));
     }
 
-    const actionText = action === 'deposit' ? 'Setor Ke' : 'Tarik Dari';
-    const txNotes = `[${actionText} ${targetItem.name}] ${notes || ''}`.trim();
+    let categoryIdToUse = savingsCategory?.id || '';
+
+    // If still no category ID found, auto add Tabungan category for txType
+    if (!categoryIdToUse) {
+      await addCategory({
+        name: 'Tabungan',
+        type: txType,
+        icon: 'PiggyBank',
+        color: '#06B6D4',
+        is_default: true,
+      });
+      const newlyCreated = categories.find(c => c.type === txType && c.name.toLowerCase().includes('tabungan'));
+      if (newlyCreated) {
+        categoryIdToUse = newlyCreated.id;
+      }
+    }
+
+    const actionText = action === 'deposit' ? 'Setor Ke Tabungan' : 'Tarik Dari Tabungan';
+    const txNotes = `[${actionText}: ${targetItem.name}] ${notes || ''}`.trim();
 
     await addTransaction({
-      category_id: savingsCategory?.id || '',
+      category_id: categoryIdToUse || (txType === 'income' ? 'cat-inc-sav' : 'cat-exp-sav'),
       type: txType,
       amount,
       date: date || new Date().toISOString().split('T')[0],

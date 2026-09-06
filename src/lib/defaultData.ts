@@ -29,6 +29,13 @@ export const DEFAULT_INCOME_CATEGORIES: Omit<Category, 'id'>[] = [
     color: '#F59E0B', // Amber
     is_default: true,
   },
+  {
+    name: 'Tabungan',
+    type: 'income',
+    icon: 'PiggyBank',
+    color: '#06B6D4', // Cyan
+    is_default: true,
+  },
 ];
 
 export const DEFAULT_EXPENSE_CATEGORIES: Omit<Category, 'id'>[] = [
@@ -74,6 +81,13 @@ export const DEFAULT_EXPENSE_CATEGORIES: Omit<Category, 'id'>[] = [
     color: '#14B8A6', // Teal
     is_default: true,
   },
+  {
+    name: 'Tabungan',
+    type: 'expense',
+    icon: 'PiggyBank',
+    color: '#06B6D4', // Cyan
+    is_default: true,
+  },
 ];
 
 export const INITIAL_CATEGORIES: Category[] = [
@@ -81,12 +95,14 @@ export const INITIAL_CATEGORIES: Category[] = [
   { id: 'cat-inc-2', name: 'Gaji Istri', type: 'income', icon: 'Briefcase', color: '#06B6D4', is_default: true },
   { id: 'cat-inc-3', name: 'Bisnis', type: 'income', icon: 'TrendingUp', color: '#8B5CF6', is_default: true },
   { id: 'cat-inc-4', name: 'Investasi', type: 'income', icon: 'LineChart', color: '#F59E0B', is_default: true },
+  { id: 'cat-inc-sav', name: 'Tabungan', type: 'income', icon: 'PiggyBank', color: '#06B6D4', is_default: true },
   { id: 'cat-exp-1', name: 'Belanja Makanan', type: 'expense', icon: 'Utensils', color: '#EF4444', is_default: true },
   { id: 'cat-exp-2', name: 'Belanja Kebutuhan Harian', type: 'expense', icon: 'ShoppingCart', color: '#F97316', is_default: true },
   { id: 'cat-exp-3', name: 'Transportasi', type: 'expense', icon: 'Car', color: '#3B82F6', is_default: true },
   { id: 'cat-exp-4', name: 'Jajan Anak', type: 'expense', icon: 'Baby', color: '#EC4899', is_default: true },
   { id: 'cat-exp-5', name: 'Jajan Orang Tua', type: 'expense', icon: 'Coffee', color: '#A855F7', is_default: true },
   { id: 'cat-exp-6', name: 'Sekolah Anak', type: 'expense', icon: 'GraduationCap', color: '#14B8A6', is_default: true },
+  { id: 'cat-exp-sav', name: 'Tabungan', type: 'expense', icon: 'PiggyBank', color: '#06B6D4', is_default: true },
 ];
 
 export const AVAILABLE_ICONS = [

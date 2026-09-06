@@ -36,6 +36,7 @@ export const App: React.FC = () => {
   const {
     categories,
     transactions,
+    savingsTargets,
     isLoading: financeLoading,
     totalIncome,
     totalExpense,
@@ -254,6 +255,14 @@ export const App: React.FC = () => {
               />
             </div>
 
+            {/* Savings Target Progress Card (Shown on Home tab if user has configured savings targets) */}
+            {savingsTargets.length > 0 && (
+              <SavingsTargetCard
+                onOpenTargetModal={() => setIsSavingsTargetModalOpen(true)}
+                onOpenSavingsModal={handleOpenSavings}
+              />
+            )}
+
             {/* Quick Menu Shortcuts Banner */}
             <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 shadow-sm backdrop-blur-xl">
               <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-3">
@@ -401,7 +410,10 @@ export const App: React.FC = () => {
             </div>
 
             {/* Savings Target Progress Card */}
-            <SavingsTargetCard onOpenTargetModal={() => setIsSavingsTargetModalOpen(true)} />
+            <SavingsTargetCard
+              onOpenTargetModal={() => setIsSavingsTargetModalOpen(true)}
+              onOpenSavingsModal={handleOpenSavings}
+            />
           </div>
         )}
 

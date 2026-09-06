@@ -255,7 +255,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                             : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800'
                         }`}
                       >
-                        Setor ke Tabungan (Uang Masuk)
+                        Setor ke Tabungan (+ Tabungan)
                       </button>
 
                       <button
@@ -267,7 +267,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                             : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800'
                         }`}
                       >
-                        Tarik Tabungan (Uang Keluar)
+                        Tarik dari Tabungan (- Tabungan)
                       </button>
                     </div>
                   </div>
