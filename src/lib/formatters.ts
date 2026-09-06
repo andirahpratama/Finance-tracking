@@ -60,3 +60,24 @@ export const getTodayDateInput = (): string => {
   const day = String(today.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 };
+
+export const formatNotesForDisplay = (rawNotes?: string): string => {
+  if (!rawNotes) return '';
+
+  // Strip internal metadata tag (sav_target:...)
+  let clean = rawNotes.replace(/\(sav_target:[^)]+\)/gi, '').trim();
+
+  // Match pattern: [Setor Ke/Tarik Dari Tabungan: TargetName] UserNote
+  const bracketMatch = clean.match(/^\[(Setor Ke|Tarik Dari)(?: Tabungan)?:?\s*([^\]]+)\]\s*(.*)$/i);
+
+  if (bracketMatch) {
+    const action = bracketMatch[1].toLowerCase().includes('setor') ? 'Setor ke' : 'Tarik dari';
+    const targetName = bracketMatch[2].trim();
+    const extraNotes = bracketMatch[3].replace(/^[•\s\-\:]+/, '').trim();
+
+    return extraNotes ? `${action} ${targetName} • ${extraNotes}` : `${action} ${targetName}`;
+  }
+
+  clean = clean.replace(/\[\s*\]/g, '').replace(/\s+/g, ' ').trim();
+  return clean;
+};

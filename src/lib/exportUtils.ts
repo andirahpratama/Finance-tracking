@@ -1,5 +1,5 @@
 import { Transaction } from '../types';
-import { formatDateIndo, formatRupiah, formatCompactRupiah } from './formatters';
+import { formatDateIndo, formatRupiah, formatCompactRupiah, formatNotesForDisplay } from './formatters';
 
 export const exportTransactionsToCSV = (transactions: Transaction[], filename = 'laporan-keuangan.csv') => {
   if (!transactions.length) {
@@ -13,7 +13,7 @@ export const exportTransactionsToCSV = (transactions: Transaction[], filename = 
     `"${t.type === 'income' ? 'Pemasukan' : 'Pengeluaran'}"`,
     `"${t.category_name || '-'}"`,
     `"${t.amount}"`,
-    `"${(t.notes || '').replace(/"/g, '""')}"`,
+    `"${(formatNotesForDisplay(t.notes) || '-').replace(/"/g, '""')}"`,
   ]);
 
   const csvContent = [
@@ -234,7 +234,7 @@ export const printFinancialReport = (
                 ${t.type === 'income' ? 'Pemasukan' : 'Pengeluaran'}
               </td>
               <td>${t.category_name || '-'}</td>
-              <td>${t.notes || '-'}</td>
+              <td>${formatNotesForDisplay(t.notes) || '-'}</td>
               <td style="text-align: right; font-weight: 700;" class="${t.type === 'income' ? 'badge-income' : 'badge-expense'}">
                 ${t.type === 'income' ? '+' : '-'}${formatRupiah(t.amount)}
               </td>

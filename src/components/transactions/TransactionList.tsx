@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Edit2, Trash2, Calendar, AlertCircle, BookmarkCheck } from 'lucide-react';
 import { Transaction } from '../../types';
 import { CategoryIcon } from '../ui/CategoryIcon';
-import { formatDateIndo, formatRupiah } from '../../lib/formatters';
+import { formatDateIndo, formatRupiah, formatNotesForDisplay } from '../../lib/formatters';
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -154,7 +154,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                     <span className="font-medium text-slate-500 dark:text-slate-400">{formatDateIndo(t.date)}</span>
                     {t.notes && (
                       <span className="text-slate-700 dark:text-slate-300 break-words font-normal">
-                        • {t.notes}
+                        • {formatNotesForDisplay(t.notes)}
                       </span>
                     )}
                   </div>
