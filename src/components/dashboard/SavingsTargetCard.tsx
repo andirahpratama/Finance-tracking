@@ -9,7 +9,7 @@ interface SavingsTargetCardProps {
 }
 
 export const SavingsTargetCard: React.FC<SavingsTargetCardProps> = ({ onOpenTargetModal, onOpenSavingsModal }) => {
-  const { savingsTargets } = useFinance();
+  const { savingsTargets, addSavingsTargetItem } = useFinance();
 
   const getTargetIcon = (iconName?: string) => {
     switch (iconName) {
@@ -21,12 +21,78 @@ export const SavingsTargetCard: React.FC<SavingsTargetCardProps> = ({ onOpenTarg
     }
   };
 
+  const defaultPresets = [
+    { name: 'Tabungan Liburan', target: 1000000, icon: 'Palmtree', color: '#06b6d4', desc: 'Liburan keluarga akhir tahun' },
+    { name: 'Tabungan Pendidikan', target: 2000000, icon: 'GraduationCap', color: '#3b82f6', desc: 'Biaya sekolah & pendidikan anak' },
+    { name: 'Tabungan Dana Darurat', target: 1500000, icon: 'ShieldAlert', color: '#10b981', desc: 'Dana siaga tak terduga' },
+    { name: 'Tabungan Pensiun', target: 2500000, icon: 'PiggyBank', color: '#8b5cf6', desc: 'Investasi hari tua' },
+  ];
+
+  const handleAddPreset = async (preset: typeof defaultPresets[0]) => {
+    await addSavingsTargetItem({
+      name: preset.name,
+      target_amount: preset.target,
+      current_amount: 0,
+      category_icon: preset.icon,
+      color: preset.color,
+    });
+  };
+
   const totalTargetMonthly = savingsTargets.reduce((sum, item) => sum + (item.target_amount || 0), 0);
   const totalSavedCurrent = savingsTargets.reduce((sum, item) => sum + (item.current_amount || 0), 0);
   const overallProgressPercent = totalTargetMonthly > 0 ? Math.min(100, Math.round((totalSavedCurrent / totalTargetMonthly) * 100)) : 0;
 
+  // Empty state when no savings targets exist
   if (savingsTargets.length === 0) {
-    return null;
+    return (
+      <div className="relative overflow-hidden rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800/80 p-5 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
+              <Target className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-extrabold text-slate-900 dark:text-white">Pilih Target & Pos Tabungan Keluarga</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Klik salah satu preset di bawah untuk mulai mengaktifkan pos tabungan bulanan Anda</p>
+            </div>
+          </div>
+          <button
+            onClick={onOpenTargetModal}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 active:scale-95 transition-all self-start sm:self-auto"
+          >
+            <Plus className="w-4 h-4" />
+            Buat Pos Custom
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+          {defaultPresets.map((p) => {
+            const IconComponent = getTargetIcon(p.icon);
+            return (
+              <button
+                key={p.name}
+                type="button"
+                onClick={() => handleAddPreset(p)}
+                className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/60 hover:border-cyan-500 dark:hover:border-cyan-500 transition-all text-left group flex flex-col justify-between space-y-3"
+              >
+                <div className="flex items-center justify-between w-full">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold" style={{ backgroundColor: p.color }}>
+                    <IconComponent className="w-4 h-4" />
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 font-bold border border-cyan-500/20 group-hover:bg-cyan-500 group-hover:text-white transition-colors">
+                    + Aktifkan
+                  </span>
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900 dark:text-white">{p.name}</h4>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400">Target: {formatRupiah(p.target)}/bln</p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
   }
 
   return (

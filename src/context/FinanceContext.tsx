@@ -9,7 +9,7 @@ export const DEFAULT_SAVINGS_TARGETS: SavingsTargetItem[] = [
     id: 'preset-liburan',
     name: 'Tabungan Liburan',
     target_amount: 1000000,
-    current_amount: 2500000,
+    current_amount: 0,
     category_icon: 'Palmtree',
     color: '#06b6d4',
     is_default_preset: true,
@@ -18,7 +18,7 @@ export const DEFAULT_SAVINGS_TARGETS: SavingsTargetItem[] = [
     id: 'preset-pendidikan',
     name: 'Tabungan Pendidikan',
     target_amount: 2000000,
-    current_amount: 5000000,
+    current_amount: 0,
     category_icon: 'GraduationCap',
     color: '#3b82f6',
     is_default_preset: true,
@@ -27,7 +27,7 @@ export const DEFAULT_SAVINGS_TARGETS: SavingsTargetItem[] = [
     id: 'preset-darurat',
     name: 'Tabungan Dana Darurat',
     target_amount: 1500000,
-    current_amount: 4500000,
+    current_amount: 0,
     category_icon: 'ShieldAlert',
     color: '#10b981',
     is_default_preset: true,
@@ -36,7 +36,7 @@ export const DEFAULT_SAVINGS_TARGETS: SavingsTargetItem[] = [
     id: 'preset-pensiun',
     name: 'Tabungan Pensiun',
     target_amount: 2500000,
-    current_amount: 8000000,
+    current_amount: 0,
     category_icon: 'PiggyBank',
     color: '#8b5cf6',
     is_default_preset: true,
@@ -187,14 +187,20 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const savedTargetsStr = localStorage.getItem(getStorageKey('savings_target_items'));
         if (savedTargetsStr) {
           try {
-            setSavingsTargets(JSON.parse(savedTargetsStr));
+            const parsed = JSON.parse(savedTargetsStr);
+            const cleaned = parsed.map((t: any) => {
+              if (t.is_default_preset && (t.current_amount === 2500000 || t.current_amount === 5000000 || t.current_amount === 4500000 || t.current_amount === 8000000)) {
+                return { ...t, current_amount: 0 };
+              }
+              return t;
+            });
+            setSavingsTargets(cleaned);
           } catch {
-            setSavingsTargets(DEFAULT_SAVINGS_TARGETS.map(t => ({ ...t, user_id: user.id })));
+            setSavingsTargets([]);
           }
         } else {
-          const initialTargets = DEFAULT_SAVINGS_TARGETS.map(t => ({ ...t, user_id: user.id }));
-          setSavingsTargets(initialTargets);
-          localStorage.setItem(getStorageKey('savings_target_items'), JSON.stringify(initialTargets));
+          setSavingsTargets([]);
+          localStorage.setItem(getStorageKey('savings_target_items'), JSON.stringify([]));
         }
 
       } catch (err) {
@@ -238,16 +244,20 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const savedTargetsStr = localStorage.getItem(savingsItemsKey);
       if (savedTargetsStr) {
         try {
-          setSavingsTargets(JSON.parse(savedTargetsStr));
+          const parsed = JSON.parse(savedTargetsStr);
+          const cleaned = parsed.map((t: any) => {
+            if (t.is_default_preset && (t.current_amount === 2500000 || t.current_amount === 5000000 || t.current_amount === 4500000 || t.current_amount === 8000000)) {
+              return { ...t, current_amount: 0 };
+            }
+            return t;
+          });
+          setSavingsTargets(cleaned);
         } catch {
-          const defaultItems = DEFAULT_SAVINGS_TARGETS.map(t => ({ ...t, user_id: user.id }));
-          setSavingsTargets(defaultItems);
-          localStorage.setItem(savingsItemsKey, JSON.stringify(defaultItems));
+          setSavingsTargets([]);
         }
       } else {
-        const defaultItems = DEFAULT_SAVINGS_TARGETS.map(t => ({ ...t, user_id: user.id }));
-        setSavingsTargets(defaultItems);
-        localStorage.setItem(savingsItemsKey, JSON.stringify(defaultItems));
+        setSavingsTargets([]);
+        localStorage.setItem(savingsItemsKey, JSON.stringify([]));
       }
 
       setIsLoading(false);
@@ -566,13 +576,12 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setTransactions(demo);
     setMonthlySavingsTarget(DEFAULT_SAVINGS_TARGET);
 
-    const defaultItems = DEFAULT_SAVINGS_TARGETS.map(t => ({ ...t, user_id: user.id }));
-    setSavingsTargets(defaultItems);
+    setSavingsTargets([]);
 
     localStorage.setItem(getStorageKey('categories'), JSON.stringify(clonedCats));
     localStorage.setItem(getStorageKey('transactions'), JSON.stringify(demo));
     localStorage.setItem(getStorageKey('savings_target'), DEFAULT_SAVINGS_TARGET.toString());
-    localStorage.setItem(getStorageKey('savings_target_items'), JSON.stringify(defaultItems));
+    localStorage.setItem(getStorageKey('savings_target_items'), JSON.stringify([]));
   };
 
   // KPI Calculations & Analytics
