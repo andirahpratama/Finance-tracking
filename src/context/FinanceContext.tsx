@@ -353,7 +353,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
 
     const actionText = action === 'deposit' ? 'Setor Ke Tabungan' : 'Tarik Dari Tabungan';
-    const txNotes = `[${actionText}: ${targetItem.name}] ${notes || ''}`.trim();
+    const txNotes = `[${actionText}: ${targetItem.name}] (sav_target:${targetItem.id}) ${notes || ''}`.trim();
 
     await addTransaction({
       category_id: categoryIdToUse || (txType === 'income' ? 'cat-inc-sav' : 'cat-exp-sav'),
@@ -418,6 +418,18 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const updateCategory = async (id: string, partialCat: Partial<Category>) => {
     if (!user) return { error: 'Pengguna belum login' };
+    if (configured && supabase && !isGuest) {
+      try {
+        const { error } = await supabase
+          .from('categories')
+          .update(partialCat)
+          .eq('id', id)
+          .eq('user_id', user.id);
+        if (error) return { error: error.message };
+      } catch (err: any) {
+        return { error: err.message };
+      }
+    }
     const updated = categories.map(c => (c.id === id ? { ...c, ...partialCat } : c));
     setCategories(updated);
     localStorage.setItem(getStorageKey('categories'), JSON.stringify(updated));
@@ -426,6 +438,18 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const deleteCategory = async (id: string) => {
     if (!user) return { error: 'Pengguna belum login' };
+    if (configured && supabase && !isGuest) {
+      try {
+        const { error } = await supabase
+          .from('categories')
+          .delete()
+          .eq('id', id)
+          .eq('user_id', user.id);
+        if (error) return { error: error.message };
+      } catch (err: any) {
+        return { error: err.message };
+      }
+    }
     const updated = categories.filter(c => c.id !== id);
     setCategories(updated);
     localStorage.setItem(getStorageKey('categories'), JSON.stringify(updated));
@@ -461,9 +485,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
             id: data.id,
             user_id: data.user_id,
             category_id: data.category_id,
-            category_name: data.categories?.name || selectedCategory?.name || 'Lainnya',
-            category_icon: data.categories?.icon || selectedCategory?.icon || 'Wallet',
-            category_color: data.categories?.color || selectedCategory?.color || '#64748B',
+            category_name: data.categories?.name || selectedCategory?.name || 'Tabungan',
+            category_icon: data.categories?.icon || selectedCategory?.icon || 'PiggyBank',
+            category_color: data.categories?.color || selectedCategory?.color || '#06B6D4',
             type: data.type as TransactionType,
             amount: Number(data.amount),
             date: data.date,
@@ -481,9 +505,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         ...tx,
         id: 'tx-' + Date.now(),
         user_id: user.id,
-        category_name: selectedCategory?.name || 'Lainnya',
-        category_icon: selectedCategory?.icon || 'Wallet',
-        category_color: selectedCategory?.color || '#64748B',
+        category_name: selectedCategory?.name || 'Tabungan',
+        category_icon: selectedCategory?.icon || 'PiggyBank',
+        category_color: selectedCategory?.color || '#06B6D4',
         created_at: new Date().toISOString(),
       };
       const updated = [newTx, ...transactions];
@@ -496,6 +520,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const updateTransaction = async (id: string, tx: Partial<Transaction>) => {
     if (!user) return { error: 'Pengguna belum login' };
     const selectedCategory = tx.category_id ? categories.find(c => c.id === tx.category_id) : undefined;
+    const targetTx = transactions.find(t => t.id === id);
 
     if (configured && supabase && !isGuest) {
       try {
@@ -522,6 +547,32 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     }
 
+    // Adjust savings target balance if amount changed for a savings transaction
+    if (targetTx && tx.amount !== undefined && Number(tx.amount) !== Number(targetTx.amount) && targetTx.notes) {
+      let matchedTarget = savingsTargets.find(s => targetTx.notes?.includes(`sav_target:${s.id}`));
+      if (!matchedTarget) {
+        matchedTarget = savingsTargets.find(s => targetTx.notes?.includes(s.name));
+      }
+
+      if (matchedTarget) {
+        const currentVal = matchedTarget.current_amount || 0;
+        const oldAmount = Number(targetTx.amount) || 0;
+        const newAmount = Number(tx.amount) || 0;
+        const diff = newAmount - oldAmount;
+
+        let newVal = currentVal;
+        if (targetTx.notes.includes('Setor')) {
+          newVal = Math.max(0, currentVal + diff);
+        } else if (targetTx.notes.includes('Tarik')) {
+          newVal = Math.max(0, currentVal - diff);
+        }
+
+        if (newVal !== currentVal) {
+          await updateSavingsTargetItem(matchedTarget.id, { current_amount: newVal });
+        }
+      }
+    }
+
     const updated = transactions.map(t => {
       if (t.id === id) {
         return {
@@ -544,6 +595,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const deleteTransaction = async (id: string) => {
     if (!user) return { error: 'Pengguna belum login' };
 
+    const targetTx = transactions.find(t => t.id === id);
+
     if (configured && supabase && !isGuest) {
       try {
         const { error } = await supabase
@@ -559,6 +612,33 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       } catch (err: any) {
         console.error('Error deleting transaction:', err);
         return { error: err.message || 'Gagal menghapus transaksi dari database' };
+      }
+    }
+
+    // Reverse savings target amount if this was a savings transaction
+    if (targetTx && targetTx.notes) {
+      let matchedTarget = savingsTargets.find(s => targetTx.notes?.includes(`sav_target:${s.id}`));
+      if (!matchedTarget) {
+        matchedTarget = savingsTargets.find(s => targetTx.notes?.includes(s.name));
+      }
+
+      if (matchedTarget) {
+        const currentVal = matchedTarget.current_amount || 0;
+        const txAmount = Number(targetTx.amount) || 0;
+        const isDeposit = targetTx.notes.includes('Setor') || targetTx.type === 'expense';
+
+        let newVal = currentVal;
+        if (targetTx.notes.includes('Setor') || (isDeposit && !targetTx.notes.includes('Tarik'))) {
+          // Reversing a deposit: subtract amount from target balance
+          newVal = Math.max(0, currentVal - txAmount);
+        } else if (targetTx.notes.includes('Tarik')) {
+          // Reversing a withdrawal: add amount back to target balance
+          newVal = currentVal + txAmount;
+        }
+
+        if (newVal !== currentVal) {
+          await updateSavingsTargetItem(matchedTarget.id, { current_amount: newVal });
+        }
       }
     }
 
