@@ -52,18 +52,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Users State
   const [usersList, setUsersList] = useState<UserProfile[]>([]);
   const [userSearchTerm, setUserSearchTerm] = useState('');
+  const [isRefreshingUsers, setIsRefreshingUsers] = useState(false);
 
   // Inbox State
   const [feedbacks, setFeedbacks] = useState<FeedbackMessage[]>([]);
   const [inboxFilter, setInboxFilter] = useState<'all' | 'unread' | 'read'>('all');
 
+  const handleRefreshUsers = async () => {
+    setIsRefreshingUsers(true);
+    const list = await getSystemUsers(currentUser);
+    setUsersList(list);
+    setIsRefreshingUsers(false);
+  };
+
   useEffect(() => {
     setFeedbacks(getFeedbacks());
-    const loadUsers = async () => {
-      const list = await getSystemUsers(currentUser);
-      setUsersList(list);
-    };
-    loadUsers();
+    handleRefreshUsers();
   }, [currentUser]);
 
   // Logo file upload handler
@@ -411,16 +415,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </p>
                 </div>
 
-                {/* User Search Bar */}
-                <div className="relative w-full sm:w-64">
-                  <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    value={userSearchTerm}
-                    onChange={(e) => setUserSearchTerm(e.target.value)}
-                    placeholder="Cari nama atau email user..."
-                    className="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs font-semibold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
+                {/* User Search & Sync Actions */}
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <div className="relative flex-1 sm:w-64">
+                    <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={userSearchTerm}
+                      onChange={(e) => setUserSearchTerm(e.target.value)}
+                      placeholder="Cari nama atau email user..."
+                      className="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs font-semibold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <button
+                    onClick={handleRefreshUsers}
+                    disabled={isRefreshingUsers}
+                    title="Sinkronkan data Supabase"
+                    className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-all active:scale-95 disabled:opacity-50 flex-shrink-0 flex items-center gap-1.5"
+                  >
+                    <UserCheck className={`w-4 h-4 text-emerald-400 ${isRefreshingUsers ? 'animate-spin' : ''}`} />
+                    <span className="hidden sm:inline">Sync Supabase</span>
+                  </button>
                 </div>
               </div>
 
