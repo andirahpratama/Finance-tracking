@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { recordUserActivity } from '../lib/appSettings';
 import { UserProfile } from '../types';
 
 interface AuthContextType {
@@ -27,8 +28,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const savedGuest = localStorage.getItem('ft_guest_user');
       if (savedGuest) {
         try {
-          setUser(JSON.parse(savedGuest));
+          const parsed = JSON.parse(savedGuest);
+          setUser(parsed);
           setIsGuest(true);
+          recordUserActivity(parsed);
         } catch {
           setUser(null);
         }
@@ -40,10 +43,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           full_name: 'Pengguna Demo',
           avatar_url: '',
           created_at: new Date().toISOString(),
+          last_login_at: new Date().toISOString(),
         };
         setUser(defaultGuest);
         setIsGuest(true);
         localStorage.setItem('ft_guest_user', JSON.stringify(defaultGuest));
+        recordUserActivity(defaultGuest);
       }
       setIsLoading(false);
       return;
@@ -63,15 +68,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
             avatar_url: session.user.user_metadata?.avatar_url || '',
             created_at: session.user.created_at,
+            last_login_at: session.user.last_sign_in_at || new Date().toISOString(),
           };
           setUser(profile);
           setIsGuest(false);
+          recordUserActivity(profile);
         } else {
           // Check if user previously chose guest mode
           const savedGuest = localStorage.getItem('ft_guest_user');
           if (savedGuest) {
-            setUser(JSON.parse(savedGuest));
+            const parsed = JSON.parse(savedGuest);
+            setUser(parsed);
             setIsGuest(true);
+            recordUserActivity(parsed);
           } else {
             setUser(null);
           }
@@ -96,9 +105,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
           avatar_url: session.user.user_metadata?.avatar_url || '',
           created_at: session.user.created_at,
+          last_login_at: session.user.last_sign_in_at || new Date().toISOString(),
         };
         setUser(profile);
         setIsGuest(false);
+        recordUserActivity(profile);
         localStorage.removeItem('ft_guest_user');
       } else if (!isGuest) {
         setUser(null);
@@ -142,13 +153,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (data.user) {
-        setUser({
+        const profile: UserProfile = {
           id: data.user.id,
           email: data.user.email || '',
           full_name: data.user.user_metadata?.full_name || data.user.email?.split('@')[0],
           avatar_url: data.user.user_metadata?.avatar_url || '',
           created_at: data.user.created_at,
-        });
+          last_login_at: data.user.last_sign_in_at || new Date().toISOString(),
+        };
+        setUser(profile);
+        recordUserActivity(profile);
         setIsGuest(false);
         localStorage.removeItem('ft_guest_user');
       }
@@ -171,8 +185,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email,
         full_name: fullName || email.split('@')[0],
         created_at: new Date().toISOString(),
+        last_login_at: new Date().toISOString(),
       };
       setUser(demoUser);
+      recordUserActivity(demoUser);
       setIsGuest(true);
       localStorage.setItem('ft_guest_user', JSON.stringify(demoUser));
       return { error: null, needsEmailConfirmation: false };
@@ -206,12 +222,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (data.user && data.session) {
-        setUser({
+        const profile: UserProfile = {
           id: data.user.id,
           email: data.user.email || '',
           full_name: fullName,
           created_at: data.user.created_at,
-        });
+          last_login_at: data.user.last_sign_in_at || new Date().toISOString(),
+        };
+        setUser(profile);
+        recordUserActivity(profile);
         setIsGuest(false);
         localStorage.removeItem('ft_guest_user');
       }

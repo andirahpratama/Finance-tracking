@@ -35,6 +35,7 @@ export interface UserProfile {
   balance_warning_threshold?: number; // default 50_000 (Rp/hari) — mood: neutral
   balance_critical_threshold?: number; // below warning — mood: sad
   created_at?: string;
+  last_login_at?: string;
 }
 
 export interface BalanceThresholds {

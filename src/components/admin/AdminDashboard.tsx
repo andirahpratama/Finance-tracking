@@ -59,7 +59,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   useEffect(() => {
     setFeedbacks(getFeedbacks());
-    setUsersList(getSystemUsers(currentUser));
+    const loadUsers = async () => {
+      const list = await getSystemUsers(currentUser);
+      setUsersList(list);
+    };
+    loadUsers();
   }, [currentUser]);
 
   // Logo file upload handler
@@ -441,36 +445,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
                     <tr>
-                      <th className="px-4 py-3">Pengguna</th>
-                      <th className="px-4 py-3">Email</th>
-                      <th className="px-4 py-3">Tanggal Bergabung</th>
-                      <th className="px-4 py-3 text-center">Status</th>
+                      <th className="px-4 py-3">Nama Pengguna (Supabase)</th>
+                      <th className="px-4 py-3">Email Pengguna</th>
+                      <th className="px-4 py-3">Tanggal Mendaftar</th>
+                      <th className="px-4 py-3 text-center">Status & Terakhir Login</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
                     {filteredUsers.map((u) => (
                       <tr key={u.id} className="hover:bg-slate-800/40 transition-colors">
                         <td className="px-4 py-3 font-bold text-white flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-500 flex items-center justify-center text-slate-950 font-bold text-xs">
+                          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-500 flex items-center justify-center text-slate-950 font-bold text-xs flex-shrink-0">
                             {u.full_name?.charAt(0).toUpperCase() || 'U'}
                           </div>
                           <div>
-                            <span>{u.full_name || 'Pengguna'}</span>
+                            <span className="text-slate-100">{u.full_name || u.email.split('@')[0]}</span>
                             {currentUser?.id === u.id && (
                               <span className="ml-2 text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">
-                                (Anda)
+                                (Sesi Anda)
                               </span>
                             )}
                           </div>
                         </td>
                         <td className="px-4 py-3 text-slate-300 font-mono">{u.email}</td>
                         <td className="px-4 py-3 text-slate-400">
-                          {u.created_at ? new Date(u.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
+                          {u.created_at ? new Date(u.created_at).toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}
                         </td>
                         <td className="px-4 py-3 text-center">
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                             <UserCheck className="w-3 h-3" />
-                            Aktif
+                            Terdaftar & Aktif
+                          </span>
+                          <span className="block text-[10px] text-slate-400 mt-1 font-medium">
+                            Terakhir Login:{' '}
+                            <span className="text-slate-200 font-semibold">
+                              {u.last_login_at ? new Date(u.last_login_at).toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Hari Ini'}
+                            </span>
                           </span>
                         </td>
                       </tr>
