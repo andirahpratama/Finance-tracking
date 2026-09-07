@@ -20,7 +20,7 @@ export const Footer: React.FC = () => {
         <div className="flex items-center gap-3">
           <span className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 text-[11px] text-slate-700 dark:text-slate-300">
             <ShieldCheck className="w-3 h-3 text-emerald-500" />
-            Supabase DB & RLS Protected
+            Database & RLS Protected
           </span>
         </div>
       </div>
