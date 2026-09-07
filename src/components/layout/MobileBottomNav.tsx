@@ -45,7 +45,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       {/* Floating Action Menu Overlay (Input options) */}
       <AnimatePresence>
         {showInputMenu && (
-          <div className="fixed inset-0 z-50 md:hidden pointer-events-auto flex flex-col justify-end pb-24 px-4">
+          <div className="fixed inset-0 z-50 lg:hidden pointer-events-auto flex flex-col justify-end pb-24 px-4">
             {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
@@ -146,7 +146,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       </AnimatePresence>
 
       {/* Floating Bottom Nav Container */}
-      <div className="fixed bottom-3 left-3 right-3 z-40 md:hidden pointer-events-none">
+      <div className="fixed bottom-3 left-3 right-3 z-40 lg:hidden pointer-events-none">
         <div className="max-w-md mx-auto relative flex items-center justify-between">
           
           {/* Floating Pink FAB Button */}

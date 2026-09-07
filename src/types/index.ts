@@ -131,3 +131,23 @@ export interface PrintReportOptions {
   monthIndex?: number; // 0-11
 }
 
+export type FeedbackCategory = 'saran' | 'fitur' | 'bug' | 'lainnya';
+
+export interface FeedbackMessage {
+  id: string;
+  user_id?: string;
+  sender_name: string;
+  sender_email: string;
+  category: FeedbackCategory;
+  message: string;
+  created_at: string;
+  read: boolean;
+}
+
+export interface AppSettings {
+  appName: string;
+  customLogo?: string; // base64 Data URL or SVG string
+  customFavicon?: string; // base64 Data URL or SVG string
+}
+
+

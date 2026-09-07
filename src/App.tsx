@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from './context/AuthContext';
 import { useFinance } from './context/FinanceContext';
 import { Navbar } from './components/layout/Navbar';
@@ -17,8 +17,12 @@ import { CategoryManagerModal } from './components/categories/CategoryManagerMod
 import { PrintReportModal } from './components/reports/PrintReportModal';
 import { AuthModal } from './components/auth/AuthModal';
 import { ProfileSettingsModal } from './components/profile/ProfileSettingsModal';
+import { FeedbackModal } from './components/profile/FeedbackModal';
+import { AdminLoginModal } from './components/admin/AdminLoginModal';
+import { AdminDashboard } from './components/admin/AdminDashboard';
 import { exportTransactionsToCSV } from './lib/exportUtils';
-import { FilterOptions, Transaction, TransactionType } from './types';
+import { getAppSettings, applyFavicon } from './lib/appSettings';
+import { FilterOptions, Transaction, TransactionType, AppSettings } from './types';
 import {
   Wallet,
   TrendingUp,
@@ -32,12 +36,11 @@ import {
 } from 'lucide-react';
 
 export const App: React.FC = () => {
-  const { isLoading: authLoading } = useAuth();
+  useAuth();
   const {
     categories,
     transactions,
     savingsTargets,
-    isLoading: financeLoading,
     totalIncome,
     totalExpense,
     totalBalance,
@@ -48,6 +51,15 @@ export const App: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<TabType>('home');
 
+  // Admin Route & Auth State
+  const [isAdminRoute, setIsAdminRoute] = useState<boolean>(() => {
+    return window.location.pathname.endsWith('/admin') || window.location.hash === '#admin';
+  });
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
+    return localStorage.getItem('ft_admin_authenticated') === 'true';
+  });
+  const [appSettings, setAppSettings] = useState<AppSettings>(getAppSettings());
+
   // Modals state
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
   const [transactionModalType, setTransactionModalType] = useState<TransactionType | 'savings'>('expense');
@@ -57,6 +69,40 @@ export const App: React.FC = () => {
   const [isSavingsTargetModalOpen, setIsSavingsTargetModalOpen] = useState(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
+
+  // URL Hash & Path listener for /admin hidden route & dynamic favicon application
+  useEffect(() => {
+    if (appSettings.customFavicon) {
+      applyFavicon(appSettings.customFavicon);
+    }
+
+    const checkAdminRoute = () => {
+      const pathIsAdmin = window.location.pathname.endsWith('/admin') || window.location.hash === '#admin';
+      setIsAdminRoute(pathIsAdmin);
+    };
+
+    window.addEventListener('popstate', checkAdminRoute);
+    window.addEventListener('hashchange', checkAdminRoute);
+    return () => {
+      window.removeEventListener('popstate', checkAdminRoute);
+      window.removeEventListener('hashchange', checkAdminRoute);
+    };
+  }, [appSettings]);
+
+  const handleExitAdmin = () => {
+    if (window.location.hash === '#admin') {
+      window.location.hash = '';
+    } else if (window.location.pathname.endsWith('/admin')) {
+      window.history.pushState({}, '', '/');
+    }
+    setIsAdminRoute(false);
+  };
+
+  const handleAdminLogout = () => {
+    localStorage.removeItem('ft_admin_authenticated');
+    setIsAdminAuthenticated(false);
+  };
 
   // Filters state (Default to 'monthly' with current date selections)
   const [filters, setFilters] = useState<FilterOptions>({
@@ -200,15 +246,22 @@ export const App: React.FC = () => {
     setIsPrintModalOpen(true);
   };
 
-  if (authLoading || financeLoading) {
+  // Hidden Admin Route view
+  if (isAdminRoute) {
+    if (!isAdminAuthenticated) {
+      return (
+        <AdminLoginModal
+          onLoginSuccess={() => setIsAdminAuthenticated(true)}
+          onBackToApp={handleExitAdmin}
+        />
+      );
+    }
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center text-slate-500 dark:text-slate-400">
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center animate-bounce shadow-xl shadow-emerald-500/20 dark:shadow-emerald-950">
-          <Wallet className="w-6 h-6 text-white dark:text-slate-950" />
-        </div>
-        <p className="mt-4 text-sm font-semibold text-slate-900 dark:text-white animate-pulse">Memuat Finance Tracking...</p>
-        <span className="text-xs text-slate-500 dark:text-slate-400 mt-1">Menyiapkan database & maskot</span>
-      </div>
+      <AdminDashboard
+        onLogoutAdmin={handleAdminLogout}
+        onBackToApp={handleExitAdmin}
+        onSettingsUpdated={(newSettings) => setAppSettings(newSettings)}
+      />
     );
   }
 
@@ -225,6 +278,8 @@ export const App: React.FC = () => {
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
         onOpenSavingsTargetModal={() => setIsSavingsTargetModalOpen(true)}
         onOpenProfileSettings={() => setIsProfileModalOpen(true)}
+        onOpenFeedbackModal={() => setIsFeedbackModalOpen(true)}
+        customLogo={appSettings.customLogo}
       />
 
       {/* Main Content Area */}
@@ -472,6 +527,11 @@ export const App: React.FC = () => {
       <ProfileSettingsModal
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}
+      />
+
+      <FeedbackModal
+        isOpen={isFeedbackModalOpen}
+        onClose={() => setIsFeedbackModalOpen(false)}
       />
     </div>
   );

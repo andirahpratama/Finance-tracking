@@ -3,10 +3,18 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     @apply bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 font-sans transition-colors duration-200;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     overflow-x: hidden;
+  }
+
+  button, a {
+    @apply transition-all duration-150 active:scale-[0.98];
   }
 }
 
