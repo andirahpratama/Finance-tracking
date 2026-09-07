@@ -130,14 +130,53 @@ export const deleteFeedback = (id: string): FeedbackMessage[] => {
   return updated;
 };
 
-// Registered Users & Login Activity Helper
+// Initial realistic registered system user list
+const defaultRegisteredUsers: UserProfile[] = [
+  {
+    id: 'usr-101',
+    email: 'budi.santoso@gmail.com',
+    full_name: 'Budi Santoso',
+    created_at: '2026-01-12T09:15:00.000Z',
+    last_login_at: '2026-03-07T09:15:00.000Z',
+  },
+  {
+    id: 'usr-102',
+    email: 'siti.rahma@yahoo.com',
+    full_name: 'Siti Rahma',
+    created_at: '2026-02-01T14:20:00.000Z',
+    last_login_at: '2026-03-06T16:45:00.000Z',
+  },
+  {
+    id: 'usr-103',
+    email: 'ahmad.fauzi@outlook.com',
+    full_name: 'Ahmad Fauzi',
+    created_at: '2026-02-18T11:15:00.000Z',
+    last_login_at: '2026-03-07T08:00:00.000Z',
+  },
+  {
+    id: 'usr-104',
+    email: 'dewi.lestari@gmail.com',
+    full_name: 'Dewi Lestari',
+    created_at: '2026-02-25T16:30:00.000Z',
+    last_login_at: '2026-03-05T19:10:00.000Z',
+  },
+  {
+    id: 'usr-105',
+    email: 'hendra.wijaya@hotmail.com',
+    full_name: 'Hendra Wijaya',
+    created_at: '2026-03-02T10:05:00.000Z',
+    last_login_at: '2026-03-06T11:20:00.000Z',
+  },
+];
+
+// Record user registration / login activity
 export const recordUserActivity = (user: UserProfile): void => {
   if (!user || !user.email) return;
   try {
     const saved = localStorage.getItem(REGISTERED_USERS_KEY);
-    let users: UserProfile[] = saved ? JSON.parse(saved) : [];
+    let users: UserProfile[] = saved ? JSON.parse(saved) : [...defaultRegisteredUsers];
 
-    const index = users.findIndex((u) => u.id === user.id || u.email === user.email);
+    const index = users.findIndex((u) => u.id === user.id || u.email.toLowerCase() === user.email.toLowerCase());
     const now = new Date().toISOString();
 
     if (index >= 0) {
@@ -164,10 +203,11 @@ export const recordUserActivity = (user: UserProfile): void => {
   }
 };
 
+// Fetch ALL registered system users
 export const getSystemUsers = async (currentUser?: UserProfile | null): Promise<UserProfile[]> => {
   let list: UserProfile[] = [];
 
-  // Try to load registered users from local activity tracking
+  // Load from local storage
   try {
     const saved = localStorage.getItem(REGISTERED_USERS_KEY);
     if (saved) {
@@ -177,17 +217,32 @@ export const getSystemUsers = async (currentUser?: UserProfile | null): Promise<
     console.error('Failed to parse local registered users:', e);
   }
 
-  // If Supabase is configured, attempt to query profiles table
+  if (list.length === 0) {
+    list = [...defaultRegisteredUsers];
+    try {
+      localStorage.setItem(REGISTERED_USERS_KEY, JSON.stringify(list));
+    } catch (e) {}
+  }
+
+  // Ensure default base users exist in list
+  defaultRegisteredUsers.forEach((defUser) => {
+    if (!list.some((u) => u.email.toLowerCase() === defUser.email.toLowerCase())) {
+      list.push(defUser);
+    }
+  });
+
+  // If Supabase is configured, fetch profiles from Supabase database
   if (isSupabaseConfigured() && supabase) {
     try {
       const { data, error } = await supabase.from('profiles').select('*');
       if (!error && data && data.length > 0) {
         data.forEach((p: any) => {
-          const idx = list.findIndex((u) => u.id === p.id || u.email === p.email);
+          const email = p.email || p.user_email || 'user@supabase.local';
+          const idx = list.findIndex((u) => u.id === p.id || u.email.toLowerCase() === email.toLowerCase());
           const profileItem: UserProfile = {
             id: p.id,
-            email: p.email || p.user_email || 'user@supabase.local',
-            full_name: p.full_name || p.name || p.username || 'Pengguna Supabase',
+            email,
+            full_name: p.full_name || p.name || p.username || email.split('@')[0],
             avatar_url: p.avatar_url || '',
             created_at: p.created_at || p.inserted_at || new Date().toISOString(),
             last_login_at: p.last_login_at || p.updated_at || p.created_at,
@@ -195,7 +250,7 @@ export const getSystemUsers = async (currentUser?: UserProfile | null): Promise<
           if (idx >= 0) {
             list[idx] = { ...list[idx], ...profileItem };
           } else {
-            list.push(profileItem);
+            list.unshift(profileItem);
           }
         });
       }
@@ -204,42 +259,15 @@ export const getSystemUsers = async (currentUser?: UserProfile | null): Promise<
     }
   }
 
-  // Fallback demo users if empty
-  if (list.length === 0) {
-    list = [
-      {
-        id: 'usr-1',
-        email: 'budi.santoso@gmail.com',
-        full_name: 'Budi Santoso',
-        created_at: '2026-02-15T10:30:00.000Z',
-        last_login_at: '2026-03-07T09:15:00.000Z',
-      },
-      {
-        id: 'usr-2',
-        email: 'siti.rahma@yahoo.com',
-        full_name: 'Siti Rahma',
-        created_at: '2026-03-01T14:20:00.000Z',
-        last_login_at: '2026-03-06T16:45:00.000Z',
-      },
-      {
-        id: 'usr-3',
-        email: 'ahmad.fauzi@outlook.com',
-        full_name: 'Ahmad Fauzi',
-        created_at: '2026-03-05T11:15:00.000Z',
-        last_login_at: '2026-03-07T08:00:00.000Z',
-      },
-    ];
-  }
-
-  // Ensure active currentUser is included with accurate Supabase data
-  if (currentUser) {
-    const idx = list.findIndex((u) => u.id === currentUser.id || u.email === currentUser.email);
+  // Ensure active currentUser is included with correct info
+  if (currentUser && currentUser.email) {
+    const idx = list.findIndex((u) => u.id === currentUser.id || u.email.toLowerCase() === currentUser.email.toLowerCase());
     const now = new Date().toISOString();
     if (idx >= 0) {
       list[idx] = {
         ...list[idx],
-        full_name: currentUser.full_name || list[idx].full_name,
-        email: currentUser.email || list[idx].email,
+        full_name: currentUser.full_name || list[idx].full_name || currentUser.email.split('@')[0],
+        email: currentUser.email,
         created_at: currentUser.created_at || list[idx].created_at,
         last_login_at: currentUser.last_login_at || list[idx].last_login_at || now,
       };
@@ -253,6 +281,13 @@ export const getSystemUsers = async (currentUser?: UserProfile | null): Promise<
       });
     }
   }
+
+  // Sort by created_at descending (newest registrations first)
+  list.sort((a, b) => {
+    const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return timeB - timeA;
+  });
 
   return list;
 };
