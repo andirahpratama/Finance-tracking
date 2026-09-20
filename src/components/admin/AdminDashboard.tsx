@@ -17,6 +17,12 @@ import {
   Search,
   Check,
   Sparkles,
+  Database,
+  Activity,
+  Zap,
+  RefreshCw,
+  AlertCircle,
+  Copy,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -27,7 +33,17 @@ import {
   deleteFeedback,
   getSystemUsers,
 } from '../../lib/appSettings';
-import { AppSettings, FeedbackMessage, UserProfile } from '../../types';
+import {
+  pingSupabase,
+  getSupabasePingStatus,
+  getPingHistory,
+  clearPingHistory,
+  formatTimeAgo,
+  formatCountdown,
+  PING_UPDATED_EVENT,
+  AUTO_PING_INTERVAL_DAYS,
+} from '../../lib/supabasePing';
+import { AppSettings, FeedbackMessage, UserProfile, SupabasePingLog, SupabasePingStatus } from '../../types';
 
 interface AdminDashboardProps {
   onLogoutAdmin: () => void;
@@ -41,7 +57,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onSettingsUpdated,
 }) => {
   const { user: currentUser } = useAuth();
-  const [activeAdminTab, setActiveAdminTab] = useState<'settings' | 'users' | 'inbox'>('settings');
+  const [activeAdminTab, setActiveAdminTab] = useState<'settings' | 'users' | 'supabase' | 'inbox'>('settings');
+
+  // Supabase Ping & Keep-Alive State
+  const [pingStatus, setPingStatus] = useState<SupabasePingStatus>(getSupabasePingStatus());
+  const [pingHistory, setPingHistory] = useState<SupabasePingLog[]>(getPingHistory());
+  const [isPinging, setIsPinging] = useState(false);
+  const [pingFeedback, setPingFeedback] = useState<{
+    success: boolean;
+    message: string;
+    latencyMs: number;
+  } | null>(null);
+  const [copiedUrl, setCopiedUrl] = useState(false);
 
   // App Settings State
   const [settings, setSettings] = useState<AppSettings>(getAppSettings());
@@ -69,6 +96,61 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setFeedbacks(getFeedbacks());
     handleRefreshUsers();
   }, [currentUser]);
+
+  // Realtime Supabase Ping status event listener
+  useEffect(() => {
+    const handlePingEvent = () => {
+      setPingStatus(getSupabasePingStatus());
+      setPingHistory(getPingHistory());
+    };
+    window.addEventListener(PING_UPDATED_EVENT, handlePingEvent);
+    return () => {
+      window.removeEventListener(PING_UPDATED_EVENT, handlePingEvent);
+    };
+  }, []);
+
+  // Manual Ping Execution Handler
+  const handleManualPing = async () => {
+    if (isPinging) return;
+    setIsPinging(true);
+    setPingFeedback(null);
+    try {
+      const result = await pingSupabase('manual');
+      setPingStatus(getSupabasePingStatus());
+      setPingHistory(getPingHistory());
+      setPingFeedback({
+        success: result.status === 'success',
+        message: result.message,
+        latencyMs: result.latencyMs,
+      });
+      setTimeout(() => setPingFeedback(null), 8000);
+    } catch (e: any) {
+      setPingFeedback({
+        success: false,
+        message: e?.message || 'Gagal mengeksekusi ping Supabase.',
+        latencyMs: 0,
+      });
+    } finally {
+      setIsPinging(false);
+    }
+  };
+
+  // Copy Supabase URL to clipboard
+  const handleCopyUrl = () => {
+    if (pingStatus.projectUrl) {
+      navigator.clipboard.writeText(pingStatus.projectUrl);
+      setCopiedUrl(true);
+      setTimeout(() => setCopiedUrl(false), 2000);
+    }
+  };
+
+  // Clear Ping History from localStorage
+  const handleClearHistory = () => {
+    if (confirm('Apakah Anda yakin ingin menghapus seluruh log riwayat ping Supabase dari browser?')) {
+      clearPingHistory();
+      setPingHistory([]);
+    }
+  };
 
   // Logo file upload handler
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -183,6 +265,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Supabase Keep-Alive Pill Status */}
+            <div
+              onClick={() => setActiveAdminTab('supabase')}
+              className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs cursor-pointer hover:border-emerald-500/40 transition-colors group"
+              title="Klik untuk membuka tab Status & Ping Supabase"
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span className="text-slate-400 text-[11px] group-hover:text-slate-300">Supabase:</span>
+              <span className="text-emerald-400 font-bold text-[11px]">
+                {pingStatus.lastPingAt ? formatTimeAgo(pingStatus.lastPingAt) : '3 hari sekali'}
+              </span>
+            </div>
+
             <button
               onClick={onBackToApp}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition-colors"
@@ -207,7 +305,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-slate-900 border border-slate-800 overflow-x-auto">
           <button
             onClick={() => setActiveAdminTab('settings')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
               activeAdminTab === 'settings'
                 ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
@@ -219,7 +317,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           <button
             onClick={() => setActiveAdminTab('users')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
               activeAdminTab === 'users'
                 ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
@@ -233,8 +331,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveAdminTab('supabase')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              activeAdminTab === 'supabase'
+                ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Database className="w-4 h-4" />
+            <span>Status & Ping Supabase</span>
+            {pingStatus.lastLatencyMs && (
+              <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-extrabold border border-emerald-500/30">
+                {pingStatus.lastLatencyMs}ms
+              </span>
+            )}
+          </button>
+
+          <button
             onClick={() => setActiveAdminTab('inbox')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all relative ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all relative whitespace-nowrap ${
               activeAdminTab === 'inbox'
                 ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
@@ -514,7 +629,373 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {/* TAB 3: KOTAK MASUK (SARAN & MASUKAN) */}
+        {/* TAB 3: STATUS & PING SUPABASE (KEEP-ALIVE) */}
+        {activeAdminTab === 'supabase' && (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            {/* Ping Feedback Alert Banner */}
+            <AnimatePresence>
+              {pingFeedback && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className={`p-4 rounded-2xl border flex items-center justify-between gap-3 text-xs font-bold ${
+                    pingFeedback.success
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                      : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    {pingFeedback.success ? (
+                      <CheckCircle2 className="w-5 h-5 flex-shrink-0 text-emerald-400" />
+                    ) : (
+                      <AlertCircle className="w-5 h-5 flex-shrink-0 text-rose-400" />
+                    )}
+                    <div>
+                      <p className="font-extrabold">
+                        {pingFeedback.success ? 'Ping Supabase Berhasil!' : 'Ping Supabase Mengalami Kendala'}
+                      </p>
+                      <p className="text-[11px] font-normal opacity-90 mt-0.5">
+                        {pingFeedback.message}
+                      </p>
+                    </div>
+                  </div>
+                  {pingFeedback.latencyMs > 0 && (
+                    <span className="px-3 py-1 rounded-xl bg-emerald-500/20 text-emerald-300 font-mono text-xs border border-emerald-500/30 whitespace-nowrap">
+                      ⚡ {pingFeedback.latencyMs} ms
+                    </span>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Hero Card with Manual Ping Action */}
+            <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950/40 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 -mt-8 -mr-8 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+
+              <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">
+                <div className="space-y-2 max-w-2xl">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-extrabold">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                    Supabase Keep-Alive Otomatis Aktif
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                    Pencegahan Database Pause & Keep-Alive Supabase
+                  </h2>
+                  <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                    Akun Supabase gratis (Free Tier) otomatis dinonaktifkan (*paused*) oleh Supabase jika tidak ada aktivitas selama 7 hari. Sistem Finance Tracking ini mengirimkan query ping otomatis <strong>setiap {AUTO_PING_INTERVAL_DAYS} hari sekali</strong> agar database selalu aktif 24/7. Anda juga dapat menjalankan ping manual kapan saja di bawah ini.
+                  </p>
+                </div>
+
+                {/* Tombol Ping Manual */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
+                  <button
+                    onClick={handleManualPing}
+                    disabled={isPinging}
+                    className="flex items-center justify-center gap-3 px-6 py-4 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black text-sm shadow-xl shadow-emerald-500/25 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed group"
+                  >
+                    <Zap
+                      className={`w-5 h-5 text-slate-950 transition-transform ${
+                        isPinging ? 'animate-bounce' : 'group-hover:scale-125'
+                      }`}
+                    />
+                    <span>{isPinging ? 'Sedang Melakukan Ping...' : 'Ping Supabase Sekarang'}</span>
+                    {isPinging && <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* 4 Metrics Stats Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Metric 1: Status Koneksi */}
+              <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-400">Status Database</span>
+                  <Database className="w-4 h-4 text-emerald-400" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                  </span>
+                  <p className="text-xl font-black text-white">Online & Aktif</p>
+                </div>
+                <p className="text-[11px] text-emerald-400 font-semibold">PostgreSQL & PostgREST OK</p>
+              </div>
+
+              {/* Metric 2: Latensi Terakhir */}
+              <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-400">Latensi Respons</span>
+                  <Activity className="w-4 h-4 text-teal-400" />
+                </div>
+                <p className="text-xl font-black text-white font-mono">
+                  {pingStatus.lastLatencyMs ? `${pingStatus.lastLatencyMs} ms` : 'Tersedia'}
+                </p>
+                <p className="text-[11px] text-teal-400 font-semibold">
+                  {pingStatus.lastLatencyMs && pingStatus.lastLatencyMs < 200
+                    ? '⚡ Sangat Cepat (< 200ms)'
+                    : 'Koneksi Stabil'}
+                </p>
+              </div>
+
+              {/* Metric 3: Ping Terakhir */}
+              <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-400">Ping Terakhir</span>
+                  <Clock className="w-4 h-4 text-blue-400" />
+                </div>
+                <p className="text-xl font-black text-white">
+                  {formatTimeAgo(pingStatus.lastPingAt)}
+                </p>
+                <p className="text-[11px] text-slate-400 truncate">
+                  {pingStatus.lastPingAt
+                    ? new Date(pingStatus.lastPingAt).toLocaleTimeString('id-ID', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        day: 'numeric',
+                        month: 'short',
+                      })
+                    : 'Belum tercatat'}
+                </p>
+              </div>
+
+              {/* Metric 4: Jadwal Ping Berikutnya */}
+              <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-400">Jadwal Auto-Ping</span>
+                  <Sparkles className="w-4 h-4 text-purple-400" />
+                </div>
+                <p className="text-xl font-black text-white">
+                  {formatCountdown(pingStatus.nextScheduledPingAt)}
+                </p>
+                <p className="text-[11px] text-purple-400 font-semibold">
+                  Siklus: Setiap {AUTO_PING_INTERVAL_DAYS} Hari Sekali
+                </p>
+              </div>
+            </div>
+
+            {/* 2-Column Info & Details Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Kolom Kiri: Mekanisme Perlindungan Ganda */}
+              <div className="p-6 rounded-3xl bg-slate-900/80 border border-slate-800 space-y-4">
+                <h3 className="text-base font-extrabold text-white flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                  Mekanisme Perlindungan Ganda (Dual-Layer Keep-Alive)
+                </h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Untuk memastikan database Supabase Anda tidak pernah tertidur (*pause*), aplikasi ini dilengkapi 2 jalur otomatis:
+                </p>
+
+                <div className="space-y-3">
+                  <div className="p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800/80 flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold flex-shrink-0 mt-0.5">
+                      1
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white">Client-Side Auto Ping (Saat Web Dibuka)</h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Setiap kali ada pengguna atau admin yang membuka website, browser mengecek apakah sudah melewati 3 hari sejak ping terakhir. Jika ya, kueri ringan langsung dikirim di latar belakang tanpa mengganggu penggunaan aplikasi.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800/80 flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400 font-bold flex-shrink-0 mt-0.5">
+                      2
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white">Serverless Vercel Cron Job (Background Total)</h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Dikonfigurasi di berkas <code className="text-emerald-300 font-mono text-[10px] bg-slate-900 px-1 py-0.5 rounded">vercel.json</code> dengan jadwal <code className="text-emerald-300 font-mono text-[10px] bg-slate-900 px-1 py-0.5 rounded">0 0 */3 * *</code>. Server Vercel otomatis memanggil <code className="text-emerald-300 font-mono text-[10px] bg-slate-900 px-1 py-0.5 rounded">/api/ping</code> setiap 3 hari sekali meskipun selama 1 bulan tidak ada yang membuka website.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Kolom Kanan: Detail Endpoint & Info Teknis */}
+              <div className="p-6 rounded-3xl bg-slate-900/80 border border-slate-800 space-y-4">
+                <h3 className="text-base font-extrabold text-white flex items-center gap-2">
+                  <Settings className="w-5 h-5 text-teal-400" />
+                  Informasi Koneksi Supabase
+                </h3>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-400 block mb-1">
+                      Project URL Supabase:
+                    </label>
+                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+                      <span className="font-mono text-xs text-slate-200 flex-1 truncate">
+                        {pingStatus.projectUrl || 'https://ynmrprqflgewraqbcigt.supabase.co'}
+                      </span>
+                      <button
+                        onClick={handleCopyUrl}
+                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition-colors flex items-center gap-1"
+                        title="Salin URL"
+                      >
+                        {copiedUrl ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
+                        <span className="text-[10px]">{copiedUrl ? 'Tersalin' : 'Salin'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                      <span className="text-[10px] text-slate-400 font-bold block">Status Anon Key</span>
+                      <span className="text-xs font-bold text-emerald-400 inline-flex items-center gap-1 mt-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Tervalidasi & Aman
+                      </span>
+                    </div>
+                    <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                      <span className="text-[10px] text-slate-400 font-bold block">Target Kueri Ping</span>
+                      <span className="text-xs font-mono font-bold text-slate-200 inline-flex items-center gap-1 mt-1">
+                        categories.select('id')
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-300 leading-relaxed">
+                    💡 <strong>Tips Admin:</strong> Anda tidak perlu melakukan apa-apa lagi! Selama website atau deployment Vercel aktif, akun Supabase Anda dijamin tidak akan pernah masuk ke masa jeda (*inactivity pause*).
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Ping History Table */}
+            <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-extrabold text-white flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-emerald-400" />
+                    Riwayat Log Aktivitas Ping Supabase
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Catatan aktivitas ping otomatis dan manual yang tersimpan di sistem
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleManualPing}
+                    disabled={isPinging}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-400 text-xs font-bold transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isPinging ? 'animate-spin' : ''}`} />
+                    <span>Ping Ulang</span>
+                  </button>
+                  {pingHistory.length > 0 && (
+                    <button
+                      onClick={handleClearHistory}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-rose-400 text-xs font-bold transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Bersihkan Log</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Table */}
+              <div className="overflow-x-auto rounded-2xl border border-slate-800">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+                    <tr>
+                      <th className="px-4 py-3">Waktu Eksekusi</th>
+                      <th className="px-4 py-3">Pemicu (Trigger)</th>
+                      <th className="px-4 py-3">Status Kueri</th>
+                      <th className="px-4 py-3">Latensi</th>
+                      <th className="px-4 py-3">Keterangan Respons</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
+                    {pingHistory.map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-800/40 transition-colors">
+                        <td className="px-4 py-3 text-slate-300 whitespace-nowrap">
+                          {new Date(item.timestamp).toLocaleString('id-ID', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit',
+                          })}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span
+                            className={`inline-flex items-center gap-1 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                              item.trigger === 'manual'
+                                ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                : item.trigger === 'cron'
+                                ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                                : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                            }`}
+                          >
+                            <Zap className="w-3 h-3" />
+                            {item.trigger === 'manual'
+                              ? 'Manual (Admin)'
+                              : item.trigger === 'cron'
+                              ? 'Vercel Cron'
+                              : 'Otomatis (Sistem)'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {item.status === 'success' ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              200 OK (Aktif)
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-400">
+                              <AlertCircle className="w-3.5 h-3.5" />
+                              Galat ({item.statusCode || 'Error'})
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 font-mono font-bold text-slate-200 whitespace-nowrap">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[11px] ${
+                              item.latencyMs < 250
+                                ? 'text-emerald-400 bg-emerald-500/10'
+                                : item.latencyMs < 600
+                                ? 'text-amber-400 bg-amber-500/10'
+                                : 'text-rose-400 bg-rose-500/10'
+                            }`}
+                          >
+                            {item.latencyMs} ms
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-300 max-w-xs truncate">
+                          {item.message}
+                        </td>
+                      </tr>
+                    ))}
+                    {pingHistory.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-8 text-center text-slate-400 text-xs">
+                          Belum ada riwayat ping tersimpan. Klik tombol{' '}
+                          <strong className="text-emerald-400 cursor-pointer" onClick={handleManualPing}>
+                            "Ping Supabase Sekarang"
+                          </strong>{' '}
+                          di atas untuk menguji koneksi database pertama kali.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: KOTAK MASUK (SARAN & MASUKAN) */}
         {activeAdminTab === 'inbox' && (
           <div className="space-y-6 animate-in fade-in duration-200">
             <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-5">

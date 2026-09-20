@@ -151,4 +151,26 @@ export interface AppSettings {
   customFavicon?: string; // base64 Data URL or SVG string
 }
 
+export type PingTriggerType = 'auto' | 'manual' | 'cron';
+
+export interface SupabasePingLog {
+  id: string;
+  timestamp: string; // ISO string
+  trigger: PingTriggerType;
+  status: 'success' | 'error';
+  latencyMs: number;
+  message: string;
+  statusCode?: number;
+}
+
+export interface SupabasePingStatus {
+  isConfigured: boolean;
+  projectUrl: string;
+  lastPingAt: string | null;
+  lastLatencyMs: number | null;
+  nextScheduledPingAt: string | null;
+  lastStatus: 'success' | 'error' | 'idle';
+  autoPingIntervalDays: number;
+}
+
 

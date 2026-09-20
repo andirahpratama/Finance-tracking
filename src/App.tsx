@@ -22,6 +22,7 @@ import { AdminLoginModal } from './components/admin/AdminLoginModal';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { exportTransactionsToCSV } from './lib/exportUtils';
 import { getAppSettings, applyFavicon } from './lib/appSettings';
+import { checkAndTriggerAutoPing } from './lib/supabasePing';
 import { FilterOptions, Transaction, TransactionType, AppSettings } from './types';
 import {
   Wallet,
@@ -89,6 +90,30 @@ export const App: React.FC = () => {
       window.removeEventListener('hashchange', checkAdminRoute);
     };
   }, [appSettings]);
+
+  // Keep-Alive Supabase: Auto Ping 3 Hari Sekali
+  useEffect(() => {
+    // 1. Eksekusi pengecekan awal saat aplikasi dibuka
+    checkAndTriggerAutoPing();
+
+    // 2. Jalankan pengecekan saat tab browser kembali aktif (visibilitychange)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkAndTriggerAutoPing();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // 3. Pengecekan berkala setiap 1 jam jika tab dibiarkan tetap terbuka
+    const intervalTimer = setInterval(() => {
+      checkAndTriggerAutoPing();
+    }, 60 * 60 * 1000);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearInterval(intervalTimer);
+    };
+  }, []);
 
   const handleExitAdmin = () => {
     if (window.location.hash === '#admin') {

@@ -10,8 +10,11 @@ const cleanSupabaseUrl = (url: string): string => {
     .replace(/\/+$/, '');
 };
 
-const supabaseUrl = cleanSupabaseUrl(import.meta.env.VITE_SUPABASE_URL || '');
-const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
+const DEFAULT_SUPABASE_URL = 'https://ynmrprqflgewraqbcigt.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlubXJwcnFmbGdld3JhcWJjaWd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODczNDk3MDEsImV4cCI6MjEwMjkyNTcwMX0.fQhvf_OBsjXm58t4Eh_7kFgXy6VhQewwP8ZElrep6Ls';
+
+export const supabaseUrl = cleanSupabaseUrl(import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL);
+export const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY).trim();
 
 export const isSupabaseConfigured = (): boolean => {
   return (
