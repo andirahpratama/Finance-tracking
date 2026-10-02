@@ -9,22 +9,40 @@ interface CategoryPieChartProps {
 }
 
 export type ViewType = 'all' | 'expense' | 'income';
+export type PeriodType = 'this_month' | 'all';
 
 export const CategoryPieChart: React.FC<CategoryPieChartProps> = ({ transactions }) => {
   // Default to 'all' (Semua) as requested by user
   const [activeType, setActiveType] = useState<ViewType>('all');
+  const [periodFilter, setPeriodFilter] = useState<PeriodType>('this_month');
+
+  // Filter transactions based on periodFilter
+  const activeTransactions = useMemo(() => {
+    if (periodFilter === 'all') return transactions;
+
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth();
+
+    return transactions.filter((t) => {
+      const [yStr, mStr] = t.date.split('T')[0].split('-');
+      const y = parseInt(yStr, 10);
+      const m = parseInt(mStr, 10) - 1;
+      return y === curYear && m === curMonth;
+    });
+  }, [transactions, periodFilter]);
 
   // Compute breakdown data
   const { data, centerTitle, centerTotal, baselineTotal } = useMemo(() => {
-    const incomeTransactions = transactions.filter((t) => t.type === 'income');
-    const expenseTransactions = transactions.filter((t) => t.type === 'expense');
+    const incomeTransactions = activeTransactions.filter((t) => t.type === 'income');
+    const expenseTransactions = activeTransactions.filter((t) => t.type === 'expense');
 
     const totalInc = incomeTransactions.reduce((acc, t) => acc + Number(t.amount || 0), 0);
     const totalExp = expenseTransactions.reduce((acc, t) => acc + Number(t.amount || 0), 0);
 
     if (activeType === 'all') {
       // Baseline for percentages is Total Pemasukan (if 0, fallback to totalExp to avoid div by 0)
-      const baseline = totalInc > 0 ? totalInc : (totalExp > 0 ? totalExp : 1);
+      const baseline = totalInc > 0 ? totalInc : totalExp > 0 ? totalExp : 1;
 
       // Group expenses by category
       const catMap = new Map<
@@ -66,7 +84,7 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = ({ transactions
       };
     } else {
       // Mode 'expense' atau 'income'
-      const targetTx = transactions.filter((t) => t.type === activeType);
+      const targetTx = activeTransactions.filter((t) => t.type === activeType);
       const catMap = new Map<
         string,
         { name: string; icon: string; color: string; value: number }
@@ -95,7 +113,7 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = ({ transactions
         baselineTotal: sum > 0 ? sum : 1,
       };
     }
-  }, [transactions, activeType]);
+  }, [activeTransactions, activeType]);
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
@@ -119,48 +137,85 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = ({ transactions
 
   return (
     <div className="h-full flex flex-col justify-between">
-      {/* Type Toggle Header */}
-      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-          Distribusi Kategori
-        </span>
-        <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 text-xs">
-          <button
-            onClick={() => setActiveType('all')}
-            className={`px-3 py-1 rounded-lg font-bold transition-all ${
-              activeType === 'all'
-                ? 'bg-gradient-to-r from-emerald-600 to-teal-500 text-white shadow-sm'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            Semua
-          </button>
-          <button
-            onClick={() => setActiveType('expense')}
-            className={`px-3 py-1 rounded-lg font-bold transition-all ${
-              activeType === 'expense'
-                ? 'bg-rose-500/20 text-rose-600 dark:text-rose-300 border border-rose-500/40 shadow-sm'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            Pengeluaran
-          </button>
-          <button
-            onClick={() => setActiveType('income')}
-            className={`px-3 py-1 rounded-lg font-bold transition-all ${
-              activeType === 'income'
-                ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-500/40 shadow-sm'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            Pemasukan
-          </button>
+      {/* Header with Type & Period Controls */}
+      <div className="space-y-2 mb-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            Distribusi Kategori
+          </span>
+
+          {/* Period Filter (Bulan Ini / Semua) */}
+          <div className="flex items-center p-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 text-[11px]">
+            <button
+              onClick={() => setPeriodFilter('this_month')}
+              className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
+                periodFilter === 'this_month'
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              Bulan Ini
+            </button>
+            <button
+              onClick={() => setPeriodFilter('all')}
+              className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
+                periodFilter === 'all'
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              Semua
+            </button>
+          </div>
+        </div>
+
+        {/* Type Toggle */}
+        <div className="flex items-center justify-end">
+          <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 text-xs">
+            <button
+              onClick={() => setActiveType('all')}
+              className={`px-3 py-1 rounded-lg font-bold transition-all ${
+                activeType === 'all'
+                  ? 'bg-gradient-to-r from-emerald-600 to-teal-500 text-white shadow-sm'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              Semua
+            </button>
+            <button
+              onClick={() => setActiveType('expense')}
+              className={`px-3 py-1 rounded-lg font-bold transition-all ${
+                activeType === 'expense'
+                  ? 'bg-rose-500/20 text-rose-600 dark:text-rose-300 border border-rose-500/40 shadow-sm'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              Pengeluaran
+            </button>
+            <button
+              onClick={() => setActiveType('income')}
+              className={`px-3 py-1 rounded-lg font-bold transition-all ${
+                activeType === 'income'
+                  ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-500/40 shadow-sm'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              Pemasukan
+            </button>
+          </div>
         </div>
       </div>
 
       {data.length === 0 ? (
-        <div className="h-56 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500">
-          <p className="text-xs font-semibold">Belum ada transaksi pada periode ini</p>
+        <div className="h-56 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 text-center p-4">
+          <p className="text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">
+            {periodFilter === 'this_month' ? 'Belum ada transaksi di bulan ini' : 'Belum ada transaksi'}
+          </p>
+          <p className="text-[11px] text-slate-400">
+            {periodFilter === 'this_month'
+              ? 'Tampilan awal bulan adalah 0. Data akan otomatis terisi saat transaksi baru dicatat.'
+              : 'Silakan tambahkan transaksi untuk melihat visualisasi kategori.'}
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 items-center gap-4">

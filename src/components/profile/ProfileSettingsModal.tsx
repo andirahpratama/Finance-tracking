@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, User, Smile, AlertTriangle, Frown, Save, Sparkles, CheckCircle2 } from 'lucide-react';
+import { X, User, Smile, AlertTriangle, Frown, Save, Sparkles, CheckCircle2, Coins, Check } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useFinance } from '../../context/FinanceContext';
-import { formatRupiah } from '../../lib/formatters';
+import { formatRupiah, SUPPORTED_CURRENCIES } from '../../lib/formatters';
+import { CurrencyCode } from '../../types';
 
 interface ProfileSettingsModalProps {
   isOpen: boolean;
@@ -12,9 +13,10 @@ interface ProfileSettingsModalProps {
 
 export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({ isOpen, onClose }) => {
   const { user } = useAuth();
-  const { balanceThresholds, updateBalanceThresholds, totalBalance } = useFinance();
+  const { balanceThresholds, updateBalanceThresholds, totalBalance, appCurrency, setCurrency } = useFinance();
 
   const [fullName, setFullName] = useState(user?.full_name || '');
+  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>(appCurrency);
   const [safeInput, setSafeInput] = useState<string>(balanceThresholds.safe.toString());
   const [warningInput, setWarningInput] = useState<string>(balanceThresholds.warning.toString());
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -25,12 +27,13 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({ isOp
   useEffect(() => {
     if (isOpen) {
       setFullName(user?.full_name || '');
+      setSelectedCurrency(appCurrency);
       setSafeInput(balanceThresholds.safe.toString());
       setWarningInput(balanceThresholds.warning.toString());
       setSuccessMsg('');
       setErrorMsg('');
     }
-  }, [isOpen, balanceThresholds, user]);
+  }, [isOpen, balanceThresholds, user, appCurrency]);
 
   const safeVal = Math.max(0, parseInt(safeInput.replace(/\D/g, ''), 10) || 0);
   const warningVal = Math.max(0, parseInt(warningInput.replace(/\D/g, ''), 10) || 0);
@@ -61,6 +64,10 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({ isOp
     setIsSubmitting(true);
 
     try {
+      // 1. Simpan mata uang yang dipilih
+      setCurrency(selectedCurrency);
+
+      // 2. Simpan batas threshold
       const res = await updateBalanceThresholds({
         safe: safeVal,
         warning: warningVal,
@@ -69,7 +76,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({ isOp
       if (res.error) {
         setErrorMsg(res.error);
       } else {
-        setSuccessMsg('Pengaturan Finny berhasil disimpan!');
+        setSuccessMsg('Pengaturan profil & mata uang berhasil disimpan!');
         setTimeout(() => {
           onClose();
         }, 1200);
@@ -109,10 +116,10 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({ isOp
                 </div>
                 <div>
                   <h2 className="text-lg font-bold text-slate-900 dark:text-white leading-tight">
-                    Pengaturan Profil & Finny
+                    Pengaturan Profil & Aplikasi
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Atur profil dan acuan sisa saldo harian maskot
+                    Atur nama, mata uang tampilan, dan acuan sisa saldo Finny
                   </p>
                 </div>
               </div>
@@ -174,7 +181,53 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({ isOp
                 </div>
               </div>
 
-              {/* SECTION 2: Finny Mascot Daily Threshold Settings */}
+              {/* SECTION 2: Currency Settings (Semua dalam Singkatan) */}
+              <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+                    <Coins className="w-3.5 h-3.5 text-amber-500" />
+                    Pilihan Mata Uang Aplikasi
+                  </h3>
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                    Aktif: {selectedCurrency}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Pilih singkatan mata uang untuk seluruh tampilan nominal transaksi di aplikasi:
+                </p>
+
+                <div className="grid grid-cols-3 gap-2">
+                  {SUPPORTED_CURRENCIES.map((c) => {
+                    const isSelected = selectedCurrency === c.code;
+                    return (
+                      <button
+                        key={c.code}
+                        type="button"
+                        onClick={() => setSelectedCurrency(c.code)}
+                        className={`flex flex-col items-center justify-center p-2.5 rounded-2xl border transition-all relative ${
+                          isSelected
+                            ? 'bg-emerald-500/10 border-emerald-500 text-emerald-700 dark:text-emerald-300 shadow-sm shadow-emerald-500/10'
+                            : 'bg-slate-50 dark:bg-slate-950/60 border-slate-200 dark:border-slate-800/80 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700'
+                        }`}
+                      >
+                        {isSelected && (
+                          <div className="absolute top-1.5 right-1.5 w-3.5 h-3.5 rounded-full bg-emerald-500 text-white flex items-center justify-center">
+                            <Check className="w-2.5 h-2.5 stroke-[3]" />
+                          </div>
+                        )}
+                        <span className="text-xs font-extrabold tracking-wide">
+                          {c.code}
+                        </span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-full">
+                          {c.name}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* SECTION 3: Finny Mascot Daily Threshold Settings */}
               <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
                 <div>
                   <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-1.5 mb-1">
@@ -194,7 +247,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({ isOp
                       Wajah Tersenyum Senang 🥳
                     </span>
                     <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                      &gt; {formatRupiah(safeVal)} / hari
+                      &gt; {formatRupiah(safeVal, selectedCurrency)} / hari
                     </span>
                   </div>
                   <label className="block text-[11px] text-slate-600 dark:text-slate-400">
@@ -202,14 +255,14 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({ isOp
                   </label>
                   <div className="relative">
                     <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
-                      Rp
+                      {selectedCurrency}
                     </span>
                     <input
                       type="text"
                       value={safeInput}
                       onChange={(e) => setSafeInput(e.target.value)}
                       placeholder="100000"
-                      className="w-full pl-9 pr-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-emerald-500/30 text-slate-900 dark:text-white text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full pl-14 pr-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-emerald-500/30 text-slate-900 dark:text-white text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
                   </div>
                 </div>
@@ -222,7 +275,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({ isOp
                       Wajah Datar Sedikit Panik 🧐
                     </span>
                     <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
-                      {formatRupiah(warningVal)} - {formatRupiah(safeVal)} / hari
+                      {formatRupiah(warningVal, selectedCurrency)} - {formatRupiah(safeVal, selectedCurrency)} / hari
                     </span>
                   </div>
                   <label className="block text-[11px] text-slate-600 dark:text-slate-400">
@@ -230,14 +283,14 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({ isOp
                   </label>
                   <div className="relative">
                     <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
-                      Rp
+                      {selectedCurrency}
                     </span>
                     <input
                       type="text"
                       value={warningInput}
                       onChange={(e) => setWarningInput(e.target.value)}
                       placeholder="50000"
-                      className="w-full pl-9 pr-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-amber-500/30 text-slate-900 dark:text-white text-xs font-bold focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      className="w-full pl-14 pr-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-amber-500/30 text-slate-900 dark:text-white text-xs font-bold focus:outline-none focus:ring-2 focus:ring-amber-500"
                     />
                   </div>
                 </div>
@@ -249,7 +302,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({ isOp
                     Wajah Sedih Menangis 🥺
                   </span>
                   <span className="font-bold">
-                    &lt; {formatRupiah(warningVal)} / hari
+                    &lt; {formatRupiah(warningVal, selectedCurrency)} / hari
                   </span>
                 </div>
               </div>
@@ -269,7 +322,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({ isOp
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Sisa Saldo Harian Anda: <strong className="text-slate-900 dark:text-white font-bold">{formatRupiah(dailyRate)}/hari</strong> (Total Saldo {formatRupiah(totalBalance)} ÷ {remainingDays} hari).
+                  Sisa Saldo Harian Anda: <strong className="text-slate-900 dark:text-white font-bold">{formatRupiah(dailyRate, selectedCurrency)}/hari</strong> (Total Saldo {formatRupiah(totalBalance, selectedCurrency)} ÷ {remainingDays} hari).
                 </p>
               </div>
 

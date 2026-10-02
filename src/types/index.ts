@@ -25,14 +25,26 @@ export interface Transaction {
   created_at?: string;
 }
 
+export type CurrencyCode =
+  | 'IDR'
+  | 'USD'
+  | 'JPY'
+  | 'CNY'
+  | 'SAR'
+  | 'AUD'
+  | 'MYR'
+  | 'SGD'
+  | 'EUR';
+
 export interface UserProfile {
   id: string;
   email: string;
   full_name?: string;
   avatar_url?: string;
+  currency?: CurrencyCode;
   monthly_savings_target?: number;
-  balance_safe_threshold?: number;   // default 100_000 (Rp/hari) — mood: happy
-  balance_warning_threshold?: number; // default 50_000 (Rp/hari) — mood: neutral
+  balance_safe_threshold?: number;   // default 100_000 — mood: happy
+  balance_warning_threshold?: number; // default 50_000 — mood: neutral
   balance_critical_threshold?: number; // below warning — mood: sad
   created_at?: string;
   last_login_at?: string;

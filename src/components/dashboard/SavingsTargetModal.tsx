@@ -10,7 +10,7 @@ interface SavingsTargetModalProps {
 }
 
 export const SavingsTargetModal: React.FC<SavingsTargetModalProps> = ({ isOpen, onClose }) => {
-  const { savingsTargets, addSavingsTargetItem, updateSavingsTargetItem, deleteSavingsTargetItem } = useFinance();
+  const { savingsTargets, addSavingsTargetItem, updateSavingsTargetItem, deleteSavingsTargetItem, appCurrency } = useFinance();
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState<string>('');
@@ -55,7 +55,7 @@ export const SavingsTargetModal: React.FC<SavingsTargetModalProps> = ({ isOpen, 
 
     const targetAmount = parseRupiahInput(targetRaw);
     if (targetAmount <= 0) {
-      setErrorMsg('Target bulanan harus lebih besar dari Rp 0');
+      setErrorMsg(`Target bulanan harus lebih besar dari ${appCurrency} 0`);
       return;
     }
 
@@ -175,13 +175,13 @@ export const SavingsTargetModal: React.FC<SavingsTargetModalProps> = ({ isOpen, 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Target Menabung per Bulan</label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">Rp</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">{appCurrency}</span>
                     <input
                       type="text"
                       value={targetRaw ? Number(targetRaw).toLocaleString('id-ID') : ''}
                       onChange={(e) => setTargetRaw(e.target.value.replace(/[^\d]/g, ''))}
                       placeholder="1.500.000"
-                      className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-extrabold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full pl-14 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-extrabold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
                   </div>
                 </div>

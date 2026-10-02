@@ -21,6 +21,7 @@ import { FeedbackModal } from './components/profile/FeedbackModal';
 import { AdminLoginModal } from './components/admin/AdminLoginModal';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { exportTransactionsToCSV } from './lib/exportUtils';
+import { formatRupiah } from './lib/formatters';
 import { getAppSettings, applyFavicon } from './lib/appSettings';
 import { checkAndTriggerAutoPing } from './lib/supabasePing';
 import { FilterOptions, Transaction, TransactionType, AppSettings } from './types';
@@ -328,18 +329,18 @@ export const App: React.FC = () => {
                 isNegative={totalBalance < 0}
               />
               <StatCard
-                title="Total Pemasukan"
-                amount={totalIncome}
+                title="Pemasukan Bulan Ini"
+                amount={thisMonthIncome}
                 icon={TrendingUp}
                 variant="emerald"
-                subtitle={`Bulan Ini: Rp ${thisMonthIncome.toLocaleString('id-ID')}`}
+                subtitle={thisMonthIncome === 0 ? 'Awal bulan (Belum ada input)' : `Total Riwayat: ${formatRupiah(totalIncome)}`}
               />
               <StatCard
-                title="Total Pengeluaran"
-                amount={totalExpense}
+                title="Pengeluaran Bulan Ini"
+                amount={thisMonthExpense}
                 icon={TrendingDown}
                 variant="rose"
-                subtitle={`Bulan Ini: Rp ${thisMonthExpense.toLocaleString('id-ID')}`}
+                subtitle={thisMonthExpense === 0 ? 'Awal bulan (Belum ada input)' : `Total Riwayat: ${formatRupiah(totalExpense)}`}
               />
             </div>
 

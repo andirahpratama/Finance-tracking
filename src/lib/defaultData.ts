@@ -155,10 +155,11 @@ export const getInitialDemoTransactions = (userId?: string): Transaction[] => {
   const list: Transaction[] = [];
   let idCounter = 1;
 
-  // Generate historical monthly data for past months in current year (up to current month)
-  const startMonth = Math.max(0, currentMonth - 5); // past 6 months
+  // Generate historical monthly data only for past months (strictly prior to currentMonth)
+  // Current month starts at 0 so user enters transactions anew at beginning of month
+  const startMonth = Math.max(0, currentMonth - 5);
 
-  for (let m = startMonth; m <= currentMonth; m++) {
+  for (let m = startMonth; m < currentMonth; m++) {
     // Income 1: Gaji Suami
 
     list.push({

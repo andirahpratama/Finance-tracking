@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { Category, Transaction, TransactionType, YearlyCashflowSummary, MonthlyCashflowItem, BalanceThresholds, SavingsTargetItem, SavingsActionType } from '../types';
+import { Category, Transaction, TransactionType, YearlyCashflowSummary, MonthlyCashflowItem, BalanceThresholds, SavingsTargetItem, SavingsActionType, CurrencyCode } from '../types';
 import { INITIAL_CATEGORIES, getInitialDemoTransactions, DEFAULT_INCOME_CATEGORIES, DEFAULT_EXPENSE_CATEGORIES } from '../lib/defaultData';
+import { getAppCurrency, setAppCurrency as setGlobalAppCurrency } from '../lib/formatters';
 
 export const DEFAULT_SAVINGS_TARGETS: SavingsTargetItem[] = [
   {
@@ -77,6 +78,8 @@ interface FinanceContextType {
   deleteSavingsTargetItem: (id: string) => Promise<{ error: string | null }>;
   recordSavingsTransaction: (targetId: string, amount: number, action: SavingsActionType, date: string, notes?: string) => Promise<{ error: string | null }>;
   resetToDefaultData: () => void;
+  appCurrency: CurrencyCode;
+  setCurrency: (code: CurrencyCode) => void;
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
@@ -95,8 +98,25 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     safe: DEFAULT_BALANCE_SAFE,
     warning: DEFAULT_BALANCE_WARNING,
   });
+  const [appCurrency, setAppCurrencyState] = useState<CurrencyCode>(getAppCurrency());
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const configured = isSupabaseConfigured();
+
+  // Listen to currency change events across the application
+  useEffect(() => {
+    const handleCurrencyChange = (e: any) => {
+      if (e.detail) {
+        setAppCurrencyState(e.detail);
+      }
+    };
+    window.addEventListener('app-currency-changed', handleCurrencyChange);
+    return () => window.removeEventListener('app-currency-changed', handleCurrencyChange);
+  }, []);
+
+  const setCurrency = useCallback((code: CurrencyCode) => {
+    setAppCurrencyState(code);
+    setGlobalAppCurrency(code);
+  }, []);
 
   const getStorageKey = useCallback((prefix: string) => {
     return `ft_${prefix}_${user?.id || 'default'}`;
@@ -233,7 +253,31 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       const savedTransactions = localStorage.getItem(txKey);
       if (savedTransactions) {
-        try { setTransactions(JSON.parse(savedTransactions)); } catch { setTransactions(getInitialDemoTransactions(user.id)); }
+        try {
+          let parsed: Transaction[] = JSON.parse(savedTransactions);
+          // Clean legacy demo transactions in current month so month begins clean at 0
+          const now = new Date();
+          const curY = now.getFullYear();
+          const curM = now.getMonth();
+          const cleaned = parsed.filter(t => {
+            if (t.id && t.id.startsWith('tx-demo-')) {
+              const [yStr, mStr] = t.date.split('T')[0].split('-');
+              const y = parseInt(yStr, 10);
+              const m = parseInt(mStr, 10) - 1;
+              if (y === curY && m === curM) {
+                return false;
+              }
+            }
+            return true;
+          });
+          if (cleaned.length !== parsed.length) {
+            localStorage.setItem(txKey, JSON.stringify(cleaned));
+            parsed = cleaned;
+          }
+          setTransactions(parsed);
+        } catch {
+          setTransactions(getInitialDemoTransactions(user.id));
+        }
       } else {
         const initial = getInitialDemoTransactions(user.id);
         setTransactions(initial);
@@ -698,9 +742,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         exp += amount;
       }
 
-      const txDate = new Date(t.date);
-      const txYear = txDate.getFullYear();
-      const txMonth = txDate.getMonth();
+      const [yStr, mStr] = t.date.split('T')[0].split('-');
+      const txYear = parseInt(yStr, 10);
+      const txMonth = parseInt(mStr, 10) - 1;
 
       if (!isNaN(txYear)) {
         yearsSet.add(txYear);
@@ -770,17 +814,18 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       let totalYExp = 0;
 
       transactions.forEach(t => {
-        const d = new Date(t.date);
-        if (d.getFullYear() === year) {
-          const m = d.getMonth();
+        const [yStr, mStr] = t.date.split('T')[0].split('-');
+        const txYear = parseInt(yStr, 10);
+        const txMonth = parseInt(mStr, 10) - 1;
+        if (txYear === year) {
           const amount = Number(t.amount) || 0;
-          if (m >= 0 && m < 12) {
-            monthlyData[m].hasData = true;
+          if (txMonth >= 0 && txMonth < 12) {
+            monthlyData[txMonth].hasData = true;
             if (t.type === 'income') {
-              monthlyData[m].income += amount;
+              monthlyData[txMonth].income += amount;
               totalYInc += amount;
             } else {
-              monthlyData[m].expense += amount;
+              monthlyData[txMonth].expense += amount;
               totalYExp += amount;
             }
           }
@@ -863,6 +908,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         deleteSavingsTargetItem,
         recordSavingsTransaction,
         resetToDefaultData,
+        appCurrency,
+        setCurrency,
       }}
     >
       {children}

@@ -23,7 +23,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   editingTransaction,
   onOpenCategoryManager,
 }) => {
-  const { categories, savingsTargets, addTransaction, updateTransaction, recordSavingsTransaction } = useFinance();
+  const { categories, savingsTargets, addTransaction, updateTransaction, recordSavingsTransaction, appCurrency } = useFinance();
 
   const [inputMode, setInputMode] = useState<InputModeType>(initialType as InputModeType);
   const [savingsAction, setSavingsAction] = useState<SavingsActionType>('deposit');
@@ -92,7 +92,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     const numericAmount = parseRupiahInput(amountRaw);
 
     if (numericAmount <= 0) {
-      setErrorMsg('Jumlah nominal harus lebih dari Rp 0');
+      setErrorMsg(`Jumlah nominal harus lebih dari ${appCurrency} 0`);
       return;
     }
 
@@ -155,7 +155,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   };
 
   const availableCategories = categories.filter((c) => c.type === (inputMode === 'income' ? 'income' : 'expense'));
-  const quickAmounts = [50000, 100000, 250000, 500000, 1000000, 2500000];
 
   return (
     <AnimatePresence>
@@ -343,35 +342,22 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               {/* Amount Input */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
-                  Nominal (Rp)
+                  Nominal ({appCurrency})
                 </label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 font-bold">
-                    Rp
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 font-bold text-sm">
+                    {appCurrency}
                   </div>
                   <input
                     type="text"
                     inputMode="numeric"
-                    value={amountRaw ? formatRupiah(Number(amountRaw)).replace('Rp', '').trim() : ''}
+                    value={amountRaw ? Number(amountRaw).toLocaleString('id-ID') : ''}
                     onChange={handleAmountChange}
                     placeholder="0"
-                    className="w-full pl-12 pr-4 py-3 bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white font-bold text-xl placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors"
+                    className="w-full pl-16 pr-4 py-3 bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white font-bold text-xl placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors"
                     required
                     autoFocus
                   />
-                </div>
-
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {quickAmounts.map((q) => (
-                    <button
-                      key={q}
-                      type="button"
-                      onClick={() => setAmountRaw(q.toString())}
-                      className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/80 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors border border-slate-200 dark:border-transparent"
-                    >
-                      +{formatRupiah(q).replace(',00', '')}
-                    </button>
-                  ))}
                 </div>
               </div>
 
