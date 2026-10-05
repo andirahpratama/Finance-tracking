@@ -5,7 +5,7 @@ import { Category, Transaction, TransactionType, YearlyCashflowSummary, MonthlyC
 import { INITIAL_CATEGORIES, getInitialDemoTransactions, DEFAULT_INCOME_CATEGORIES, DEFAULT_EXPENSE_CATEGORIES, getInitialDemoGoldTransactions } from '../lib/defaultData';
 import { getAppCurrency, setAppCurrency as setGlobalAppCurrency } from '../lib/formatters';
 import { isSavingsTransaction, calculateSavingsProgress } from '../lib/savingsUtils';
-import { fetchLiveGoldPrices, calculateGoldPortfolio, saveStoredManualPrices, clearStoredManualPrices, DEFAULT_GOLD_PRICES } from '../lib/goldPriceService';
+import { fetchLiveGoldPrices, calculateGoldPortfolio, saveStoredManualPrices, clearStoredManualPrices, DEFAULT_GOLD_PRICES, isGoldPriceStale } from '../lib/goldPriceService';
 
 const currentYearNow = new Date().getFullYear();
 
@@ -361,7 +361,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     loadData();
   }, [loadData]);
 
-  // GOLD PRICES SERVICE & REFRESH
+  // GOLD PRICES SERVICE & AUTOMATIC DAILY REFRESH
   const refreshGoldPrices = useCallback(async () => {
     setIsGoldPricesLoading(true);
     try {
@@ -375,7 +375,30 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   useEffect(() => {
+    // 1. Initial refresh on load
     refreshGoldPrices();
+
+    // 2. Re-check on tab visibility change (e.g. user returns to the app)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        if (isGoldPriceStale()) {
+          refreshGoldPrices();
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // 3. Periodic automatic check every 30 minutes to ensure daily auto-update
+    const intervalTimer = setInterval(() => {
+      if (isGoldPriceStale()) {
+        refreshGoldPrices();
+      }
+    }, 30 * 60 * 1000);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearInterval(intervalTimer);
+    };
   }, [refreshGoldPrices]);
 
   // GOLD TRANSACTIONS CRUD

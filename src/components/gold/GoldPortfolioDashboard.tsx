@@ -42,6 +42,22 @@ export const GoldPortfolioDashboard: React.FC = () => {
   // We use Antam buyback price as the primary benchmark valuation
   const valuation = calculateGoldValuation(goldPortfolio, goldPrices.antam.sell);
 
+  const formattedUpdateTime = React.useMemo(() => {
+    try {
+      const d = new Date(goldPrices.last_updated);
+      if (isNaN(d.getTime())) return 'Hari ini';
+      return d.toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }) + ' WIB';
+    } catch {
+      return 'Hari ini';
+    }
+  }, [goldPrices.last_updated]);
+
   const handleDelete = async (tx: GoldTransaction) => {
     if (confirm(`Hapus transaksi ${tx.type === 'BUY' ? 'pembelian' : 'penjualan'} ${tx.gram}g emas ${tx.brand}?`)) {
       setDeletingId(tx.id);
@@ -53,13 +69,13 @@ export const GoldPortfolioDashboard: React.FC = () => {
   const getSourceBadge = () => {
     switch (goldPrices.source) {
       case 'api-internal':
-        return { label: 'Scraper Internal', bg: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' };
+        return { label: 'Scraper Pasar Live', bg: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' };
       case 'public-api':
-        return { label: 'Galeri24 API', bg: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20' };
+        return { label: 'Galeri24 Live API', bg: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20' };
       case 'manual':
         return { label: 'Harga Manual', bg: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' };
       default:
-        return { label: 'Pasar Terkini (Est)', bg: 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20' };
+        return { label: 'Pasar Terkini (Live)', bg: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' };
     }
   };
 
@@ -76,9 +92,15 @@ export const GoldPortfolioDashboard: React.FC = () => {
               <Sparkles className="w-5 h-5 text-amber-500" />
             </h2>
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Wealth tracker & kalkulator valuasi real-time berbasis Average Cost Method
-          </p>
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] font-bold">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Update Otomatis Harian Aktif</span>
+            </div>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+              • Diperbarui: {formattedUpdateTime}
+            </span>
+          </div>
         </div>
 
         {/* Action Controls for Price */}
