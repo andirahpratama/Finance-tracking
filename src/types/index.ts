@@ -190,4 +190,39 @@ export interface SupabasePingStatus {
   autoPingIntervalDays: number;
 }
 
+// ==================== GOLD INVESTMENT TYPES ====================
+export type GoldTransactionType = 'BUY' | 'SELL';
+export type GoldBrand = 'Antam' | 'UBS' | 'Hartadinata' | 'Galeri24' | 'Lainnya';
+
+export interface GoldTransaction {
+  id: string;
+  user_id?: string;
+  type: GoldTransactionType;
+  brand: GoldBrand;
+  date: string; // YYYY-MM-DD
+  gram: number; // float
+  price_per_gram: number;
+  total_amount: number; // gram * price_per_gram
+  notes?: string;
+  created_at?: string;
+}
+
+export interface GoldPortfolio {
+  total_gram: number; // Akumulasi gram BUY dikurangi SELL
+  total_invested_capital: number; // Modal Rupiah murni yang masih mengendap
+  average_buy_price: number; // total_invested_capital / total_gram
+}
+
+export interface GoldPriceItem {
+  buy: number;
+  sell: number; // buyback price
+}
+
+export interface GoldPrices {
+  antam: GoldPriceItem;
+  ubs: GoldPriceItem;
+  source: 'api-internal' | 'public-api' | 'manual' | 'mock';
+  last_updated: string;
+}
+
 

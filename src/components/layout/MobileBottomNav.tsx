@@ -10,10 +10,11 @@ import {
   ArrowUpRight,
   Tags,
   X,
+  Coins,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-export type TabType = 'home' | 'rekap' | 'history' | 'tabungan' | 'kalkulator';
+export type TabType = 'home' | 'rekap' | 'history' | 'tabungan' | 'emas' | 'kalkulator';
 
 interface MobileBottomNavProps {
   activeTab: TabType;
@@ -39,6 +40,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
     { id: 'rekap', label: 'Rekap', icon: BarChart3 },
     { id: 'history', label: 'History', icon: Receipt },
     { id: 'tabungan', label: 'Tabungan', icon: Target },
+    { id: 'emas', label: 'Emas', icon: Coins },
     { id: 'kalkulator', label: 'Kalkulator', icon: Calculator },
   ];
 

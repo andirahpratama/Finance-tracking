@@ -27,6 +27,7 @@ import { checkAndTriggerAutoPing } from './lib/supabasePing';
 import { isSavingsTransaction } from './lib/savingsUtils';
 import { FilterOptions, Transaction, TransactionType, AppSettings, SavingsTargetItem } from './types';
 import { SmartCalculators } from './components/calculators/SmartCalculators';
+import { GoldPortfolioDashboard } from './components/gold/GoldPortfolioDashboard';
 import {
   Wallet,
   TrendingUp,
@@ -38,6 +39,7 @@ import {
   Receipt,
   Target,
   Calculator,
+  Coins,
 } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -380,7 +382,7 @@ export const App: React.FC = () => {
               <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-3">
                 Akses Cepat Fitur Keuangan
               </h3>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
                 <button
                   onClick={() => setActiveTab('rekap')}
                   className="flex items-center justify-between p-3 sm:p-4 rounded-xl bg-purple-50 dark:bg-purple-500/10 border border-purple-500/20 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-500/20 transition-all group"
@@ -424,8 +426,22 @@ export const App: React.FC = () => {
                 </button>
 
                 <button
+                  onClick={() => setActiveTab('emas')}
+                  className="flex items-center justify-between p-3 sm:p-4 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-all group"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Coins className="w-5 h-5 text-amber-500" />
+                    <div className="text-left">
+                      <p className="text-xs font-bold">Tabungan Emas</p>
+                      <p className="text-[10px] text-amber-600/70 dark:text-amber-300/70 hidden sm:block">Portofolio & ROI</p>
+                    </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                </button>
+
+                <button
                   onClick={() => setActiveTab('kalkulator')}
-                  className="flex items-center justify-between p-3 sm:p-4 rounded-xl bg-teal-50 dark:bg-teal-500/10 border border-teal-500/20 text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-500/20 transition-all group"
+                  className="col-span-2 md:col-span-1 flex items-center justify-between p-3 sm:p-4 rounded-xl bg-teal-50 dark:bg-teal-500/10 border border-teal-500/20 text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-500/20 transition-all group"
                 >
                   <div className="flex items-center gap-2.5">
                     <Calculator className="w-5 h-5 text-teal-500" />
@@ -546,6 +562,11 @@ export const App: React.FC = () => {
         {/* ================= 5. KALKULATOR TAB (SMART CALCULATORS) ================= */}
         {activeTab === 'kalkulator' && (
           <SmartCalculators onCreateSavingsTarget={handleCreateSavingsTargetFromCalc} />
+        )}
+
+        {/* ================= 6. TABUNGAN EMAS TAB (WEALTH TRACKER) ================= */}
+        {activeTab === 'emas' && (
+          <GoldPortfolioDashboard />
         )}
 
       </main>

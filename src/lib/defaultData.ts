@@ -288,3 +288,45 @@ export const getInitialDemoTransactions = (userId?: string): Transaction[] => {
   return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 };
 
+export const getInitialDemoGoldTransactions = (userId: string = 'demo-user'): import('../types').GoldTransaction[] => {
+  const currentYear = new Date().getFullYear();
+  return [
+    {
+      id: 'gold-tx-1',
+      user_id: userId,
+      type: 'BUY',
+      brand: 'Antam',
+      date: `${currentYear}-01-15`,
+      gram: 5,
+      price_per_gram: 1280000,
+      total_amount: 6400000,
+      notes: 'Investasi awal tahun LM Antam CertiCard',
+      created_at: `${currentYear}-01-15T09:00:00Z`,
+    },
+    {
+      id: 'gold-tx-2',
+      user_id: userId,
+      type: 'BUY',
+      brand: 'Antam',
+      date: `${currentYear}-03-20`,
+      gram: 3,
+      price_per_gram: 1340000,
+      total_amount: 4020000,
+      notes: 'Beli tambahan graman saat bonus cair',
+      created_at: `${currentYear}-03-20T10:30:00Z`,
+    },
+    {
+      id: 'gold-tx-3',
+      user_id: userId,
+      type: 'BUY',
+      brand: 'UBS',
+      date: `${currentYear}-06-10`,
+      gram: 2,
+      price_per_gram: 1390000,
+      total_amount: 2780000,
+      notes: 'Emas UBS 2 gram di Galeri24',
+      created_at: `${currentYear}-06-10T14:15:00Z`,
+    },
+  ];
+};
+

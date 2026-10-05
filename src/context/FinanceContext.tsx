@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { Category, Transaction, TransactionType, YearlyCashflowSummary, MonthlyCashflowItem, BalanceThresholds, SavingsTargetItem, SavingsActionType, CurrencyCode } from '../types';
-import { INITIAL_CATEGORIES, getInitialDemoTransactions, DEFAULT_INCOME_CATEGORIES, DEFAULT_EXPENSE_CATEGORIES } from '../lib/defaultData';
+import { Category, Transaction, TransactionType, YearlyCashflowSummary, MonthlyCashflowItem, BalanceThresholds, SavingsTargetItem, SavingsActionType, CurrencyCode, GoldTransaction, GoldPortfolio, GoldPrices, GoldBrand } from '../types';
+import { INITIAL_CATEGORIES, getInitialDemoTransactions, DEFAULT_INCOME_CATEGORIES, DEFAULT_EXPENSE_CATEGORIES, getInitialDemoGoldTransactions } from '../lib/defaultData';
 import { getAppCurrency, setAppCurrency as setGlobalAppCurrency } from '../lib/formatters';
 import { isSavingsTransaction, calculateSavingsProgress } from '../lib/savingsUtils';
+import { fetchLiveGoldPrices, calculateGoldPortfolio, saveStoredManualPrices, clearStoredManualPrices, DEFAULT_GOLD_PRICES } from '../lib/goldPriceService';
 
 const currentYearNow = new Date().getFullYear();
 
@@ -88,6 +89,17 @@ interface FinanceContextType {
   updateSavingsTargetItem: (id: string, partial: Partial<SavingsTargetItem>) => Promise<{ error: string | null }>;
   deleteSavingsTargetItem: (id: string) => Promise<{ error: string | null }>;
   recordSavingsTransaction: (targetId: string, amount: number, action: SavingsActionType, date: string, notes?: string) => Promise<{ error: string | null }>;
+  // Gold Investment & Portfolio CRUD
+  goldTransactions: GoldTransaction[];
+  goldPortfolio: GoldPortfolio;
+  goldPrices: GoldPrices;
+  isGoldPricesLoading: boolean;
+  buyGold: (params: { brand: GoldBrand; gram: number; price_per_gram: number; date: string; notes?: string }) => Promise<{ error: string | null }>;
+  sellGold: (params: { brand: GoldBrand; gram: number; price_per_gram: number; date: string; notes?: string }) => Promise<{ error: string | null }>;
+  deleteGoldTransaction: (id: string) => Promise<{ error: string | null }>;
+  refreshGoldPrices: () => Promise<void>;
+  updateManualGoldPrice: (prices: GoldPrices) => void;
+  resetManualGoldPrice: () => Promise<void>;
   resetToDefaultData: () => void;
   appCurrency: CurrencyCode;
   setCurrency: (code: CurrencyCode) => void;
@@ -112,6 +124,16 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [appCurrency, setAppCurrencyState] = useState<CurrencyCode>(getAppCurrency());
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const configured = isSupabaseConfigured();
+
+  // Gold Investment States
+  const [goldTransactions, setGoldTransactions] = useState<GoldTransaction[]>([]);
+  const [goldPrices, setGoldPrices] = useState<GoldPrices>(DEFAULT_GOLD_PRICES);
+  const [isGoldPricesLoading, setIsGoldPricesLoading] = useState<boolean>(false);
+
+  // Compute portfolio metrics using Average Cost Method
+  const goldPortfolio = useMemo(() => {
+    return calculateGoldPortfolio(goldTransactions);
+  }, [goldTransactions]);
 
   // Listen to currency change events across the application
   useEffect(() => {
@@ -316,6 +338,21 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         localStorage.setItem(savingsItemsKey, JSON.stringify([]));
       }
 
+      // Gold Transactions (stored locally per user)
+      const goldKey = getStorageKey('gold_transactions');
+      const savedGoldStr = localStorage.getItem(goldKey);
+      if (savedGoldStr) {
+        try {
+          setGoldTransactions(JSON.parse(savedGoldStr));
+        } catch {
+          setGoldTransactions([]);
+        }
+      } else {
+        const initialGold = getInitialDemoGoldTransactions(user.id);
+        setGoldTransactions(initialGold);
+        localStorage.setItem(goldKey, JSON.stringify(initialGold));
+      }
+
       setIsLoading(false);
     }
   }, [user, isGuest, configured, getStorageKey]);
@@ -323,6 +360,137 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // GOLD PRICES SERVICE & REFRESH
+  const refreshGoldPrices = useCallback(async () => {
+    setIsGoldPricesLoading(true);
+    try {
+      const prices = await fetchLiveGoldPrices();
+      setGoldPrices(prices);
+    } catch (err) {
+      console.warn('Failed to refresh gold prices:', err);
+    } finally {
+      setIsGoldPricesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshGoldPrices();
+  }, [refreshGoldPrices]);
+
+  // GOLD TRANSACTIONS CRUD
+  const saveGoldTransactionsState = useCallback((newItems: GoldTransaction[]) => {
+    setGoldTransactions(newItems);
+    localStorage.setItem(getStorageKey('gold_transactions'), JSON.stringify(newItems));
+  }, [getStorageKey]);
+
+  const buyGold = async ({
+    brand,
+    gram,
+    price_per_gram,
+    date,
+    notes,
+  }: {
+    brand: GoldBrand;
+    gram: number;
+    price_per_gram: number;
+    date: string;
+    notes?: string;
+  }) => {
+    if (!user) return { error: 'Pengguna belum login' };
+    if (gram <= 0) return { error: 'Jumlah gram harus lebih dari 0' };
+    if (price_per_gram <= 0) return { error: 'Harga per gram tidak valid' };
+
+    const total_amount = Math.round(gram * price_per_gram);
+    const newTx: GoldTransaction = {
+      id: 'gtx-' + Date.now(),
+      user_id: user.id,
+      type: 'BUY',
+      brand,
+      date,
+      gram: Number(gram),
+      price_per_gram: Number(price_per_gram),
+      total_amount,
+      notes: notes || `Beli ${gram}g emas ${brand}`,
+      created_at: new Date().toISOString(),
+    };
+
+    const updated = [newTx, ...goldTransactions];
+    saveGoldTransactionsState(updated);
+    // Per PRD guardrails: Transaksi Beli TIDAK memotong saldo kas utama
+    return { error: null };
+  };
+
+  const sellGold = async ({
+    brand,
+    gram,
+    price_per_gram,
+    date,
+    notes,
+  }: {
+    brand: GoldBrand;
+    gram: number;
+    price_per_gram: number;
+    date: string;
+    notes?: string;
+  }) => {
+    if (!user) return { error: 'Pengguna belum login' };
+    if (gram <= 0) return { error: 'Jumlah gram harus lebih dari 0' };
+    if (price_per_gram <= 0) return { error: 'Harga per gram tidak valid' };
+    if (gram > goldPortfolio.total_gram) {
+      return { error: `Gram yang ingin dijual (${gram}g) melebihi kepemilikan aset (${goldPortfolio.total_gram}g)` };
+    }
+
+    const total_amount = Math.round(gram * price_per_gram);
+    const newTx: GoldTransaction = {
+      id: 'gtx-' + Date.now(),
+      user_id: user.id,
+      type: 'SELL',
+      brand,
+      date,
+      gram: Number(gram),
+      price_per_gram: Number(price_per_gram),
+      total_amount,
+      notes: notes || `Jual ${gram}g emas ${brand}`,
+      created_at: new Date().toISOString(),
+    };
+
+    const updated = [newTx, ...goldTransactions];
+    saveGoldTransactionsState(updated);
+
+    // Cross-Module Action (PRD requirement):
+    // Otomatis masukkan hasil penjualan sebagai Pemasukan di kas utama
+    const investCat = categories.find(c => c.type === 'income' && (c.name.toLowerCase().includes('investasi') || c.name.toLowerCase().includes('emas')));
+    const fallbackCat = categories.find(c => c.type === 'income') || categories[0];
+    const categoryId = investCat?.id || fallbackCat?.id || 'cat-custom-emas';
+
+    await addTransaction({
+      category_id: categoryId,
+      type: 'income',
+      amount: total_amount,
+      date,
+      notes: notes ? `Pencairan Emas: ${notes}` : `Pencairan ${gram} gram emas ${brand}`,
+    });
+
+    return { error: null };
+  };
+
+  const deleteGoldTransaction = async (id: string) => {
+    if (!user) return { error: 'Pengguna belum login' };
+    const updated = goldTransactions.filter(t => t.id !== id);
+    saveGoldTransactionsState(updated);
+    return { error: null };
+  };
+
+  const updateManualGoldPrice = useCallback((prices: GoldPrices) => {
+    saveStoredManualPrices(prices);
+    setGoldPrices(prices);
+  }, []);
+
+  const resetManualGoldPrice = useCallback(async () => {
+    clearStoredManualPrices();
+    await refreshGoldPrices();
+  }, [refreshGoldPrices]);
 
   // SAVINGS TARGET ITEMS CRUD & STORAGE
   const saveSavingsTargetsState = useCallback((newItems: SavingsTargetItem[]) => {
@@ -723,10 +891,14 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     setSavingsTargets([]);
 
+    const defaultGold = getInitialDemoGoldTransactions(user.id);
+    setGoldTransactions(defaultGold);
+
     localStorage.setItem(getStorageKey('categories'), JSON.stringify(clonedCats));
     localStorage.setItem(getStorageKey('transactions'), JSON.stringify(demo));
     localStorage.setItem(getStorageKey('savings_target'), DEFAULT_SAVINGS_TARGET.toString());
     localStorage.setItem(getStorageKey('savings_target_items'), JSON.stringify([]));
+    localStorage.setItem(getStorageKey('gold_transactions'), JSON.stringify(defaultGold));
   };
 
   // KPI Calculations & Analytics
@@ -950,6 +1122,16 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         updateSavingsTargetItem,
         deleteSavingsTargetItem,
         recordSavingsTransaction,
+        goldTransactions,
+        goldPortfolio,
+        goldPrices,
+        isGoldPricesLoading,
+        buyGold,
+        sellGold,
+        deleteGoldTransaction,
+        refreshGoldPrices,
+        updateManualGoldPrice,
+        resetManualGoldPrice,
         resetToDefaultData,
         appCurrency,
         setCurrency,
