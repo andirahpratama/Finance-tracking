@@ -24,7 +24,9 @@ import { exportTransactionsToCSV } from './lib/exportUtils';
 import { formatRupiah } from './lib/formatters';
 import { getAppSettings, applyFavicon } from './lib/appSettings';
 import { checkAndTriggerAutoPing } from './lib/supabasePing';
-import { FilterOptions, Transaction, TransactionType, AppSettings } from './types';
+import { isSavingsTransaction } from './lib/savingsUtils';
+import { FilterOptions, Transaction, TransactionType, AppSettings, SavingsTargetItem } from './types';
+import { SmartCalculators } from './components/calculators/SmartCalculators';
 import {
   Wallet,
   TrendingUp,
@@ -35,6 +37,7 @@ import {
   ArrowRight,
   Receipt,
   Target,
+  Calculator,
 } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -69,9 +72,15 @@ export const App: React.FC = () => {
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isSavingsTargetModalOpen, setIsSavingsTargetModalOpen] = useState(false);
+  const [savingsModalInitialData, setSavingsModalInitialData] = useState<Partial<SavingsTargetItem> | null>(null);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
+
+  const handleCreateSavingsTargetFromCalc = (item: Partial<SavingsTargetItem>) => {
+    setSavingsModalInitialData(item);
+    setIsSavingsTargetModalOpen(true);
+  };
 
   // URL Hash & Path listener for /admin hidden route & dynamic favicon application
   useEffect(() => {
@@ -172,8 +181,18 @@ export const App: React.FC = () => {
       const txDate = new Date(txYear, txMonth, txDay);
 
       if (txDate < cutoffDate) {
-        if (t.type === 'income') priorInc += Number(t.amount) || 0;
-        else priorExp += Number(t.amount) || 0;
+        const isSav = isSavingsTransaction(t);
+        const isDeposit = t.notes?.includes('Setor') || t.savings_action === 'deposit' || (isSav && t.type === 'expense');
+        const isWithdraw = t.notes?.includes('Tarik') || t.savings_action === 'withdraw' || (isSav && t.type === 'income');
+        const amt = Number(t.amount) || 0;
+
+        if (isSav) {
+          if (isDeposit) priorExp += amt;
+          else if (isWithdraw) priorInc += amt;
+        } else {
+          if (t.type === 'income') priorInc += amt;
+          else priorExp += amt;
+        }
       }
     });
 
@@ -194,14 +213,18 @@ export const App: React.FC = () => {
       }
 
       if (filters.type !== 'all') {
+        const isSavings =
+          isSavingsTransaction(t) ||
+          (t.category_name || '').toLowerCase().includes('tabungan') ||
+          (t.notes || '').toLowerCase().includes('tabungan') ||
+          t.category_icon === 'PiggyBank';
+
         if (filters.type === 'savings') {
-          const isSavings =
-            (t.category_name || '').toLowerCase().includes('tabungan') ||
-            (t.notes || '').toLowerCase().includes('tabungan') ||
-            t.category_icon === 'PiggyBank';
           if (!isSavings) return false;
-        } else if (t.type !== filters.type) {
-          return false;
+        } else if (filters.type === 'expense') {
+          if (isSavings || t.type !== 'expense') return false;
+        } else if (filters.type === 'income') {
+          if (isSavings || t.type !== 'income') return false;
         }
       }
 
@@ -357,7 +380,7 @@ export const App: React.FC = () => {
               <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-3">
                 Akses Cepat Fitur Keuangan
               </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <button
                   onClick={() => setActiveTab('rekap')}
                   className="flex items-center justify-between p-3 sm:p-4 rounded-xl bg-purple-50 dark:bg-purple-500/10 border border-purple-500/20 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-500/20 transition-all group"
@@ -388,13 +411,27 @@ export const App: React.FC = () => {
 
                 <button
                   onClick={() => setActiveTab('tabungan')}
-                  className="flex items-center justify-between p-3 sm:p-4 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-all group col-span-2 sm:col-span-1"
+                  className="flex items-center justify-between p-3 sm:p-4 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-all group"
                 >
                   <div className="flex items-center gap-2.5">
                     <Target className="w-5 h-5 text-emerald-500" />
                     <div className="text-left">
                       <p className="text-xs font-bold">Target Tabungan</p>
                       <p className="text-[10px] text-emerald-600/70 dark:text-emerald-300/70 hidden sm:block">Progres Menabung</p>
+                    </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('kalkulator')}
+                  className="flex items-center justify-between p-3 sm:p-4 rounded-xl bg-teal-50 dark:bg-teal-500/10 border border-teal-500/20 text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-500/20 transition-all group"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Calculator className="w-5 h-5 text-teal-500" />
+                    <div className="text-left">
+                      <p className="text-xs font-bold">Smart Kalkulator</p>
+                      <p className="text-[10px] text-teal-600/70 dark:text-teal-300/70 hidden sm:block">Darurat, KPR, Edukasi</p>
                     </div>
                   </div>
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
@@ -506,6 +543,11 @@ export const App: React.FC = () => {
           </div>
         )}
 
+        {/* ================= 5. KALKULATOR TAB (SMART CALCULATORS) ================= */}
+        {activeTab === 'kalkulator' && (
+          <SmartCalculators onCreateSavingsTarget={handleCreateSavingsTargetFromCalc} />
+        )}
+
       </main>
 
       {/* Floating Bottom Navigation Bar (Mobile View) */}
@@ -537,7 +579,11 @@ export const App: React.FC = () => {
 
       <SavingsTargetModal
         isOpen={isSavingsTargetModalOpen}
-        onClose={() => setIsSavingsTargetModalOpen(false)}
+        onClose={() => {
+          setIsSavingsTargetModalOpen(false);
+          setSavingsModalInitialData(null);
+        }}
+        initialData={savingsModalInitialData}
       />
 
       <PrintReportModal

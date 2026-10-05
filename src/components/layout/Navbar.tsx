@@ -19,6 +19,7 @@ import {
   PlusCircle,
   Settings,
   MessageSquare,
+  Calculator,
 } from 'lucide-react';
 
 import { motion, AnimatePresence } from 'framer-motion';
@@ -75,6 +76,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'rekap', label: 'Rekap', icon: BarChart3 },
     { id: 'history', label: 'History', icon: Receipt },
     { id: 'tabungan', label: 'Tabungan', icon: Target },
+    { id: 'kalkulator', label: 'Kalkulator', icon: Calculator },
   ];
 
   return (
@@ -438,6 +440,22 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <div className="flex items-center gap-3">
                       <Target className="w-4 h-4 text-emerald-500" />
                       <span className="text-xs">Tabungan (Target Menabung)</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      onSelectTab('kalkulator');
+                      closeMobileMenu();
+                    }}
+                    className={`w-full flex items-center justify-between p-3 rounded-xl text-left transition-colors ${
+                      activeTab === 'kalkulator' ? 'bg-teal-50 dark:bg-teal-500/10 text-teal-600 dark:text-teal-400 font-bold' : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Calculator className="w-4 h-4 text-teal-500" />
+                      <span className="text-xs">Kalkulator (Dana Darurat, KPR, Pendidikan)</span>
                     </div>
                     <ChevronRight className="w-4 h-4 text-slate-400" />
                   </button>

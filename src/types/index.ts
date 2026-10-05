@@ -22,6 +22,9 @@ export interface Transaction {
   amount: number;
   date: string; // YYYY-MM-DD
   notes?: string;
+  is_savings_transfer?: boolean;
+  savings_target_id?: string;
+  savings_action?: SavingsActionType;
   created_at?: string;
 }
 
@@ -126,9 +129,11 @@ export interface SavingsTargetItem {
   id: string;
   user_id?: string;
   name: string;
-  target_amount: number; // Target per bulan
+  target_amount: number; // Total target dana yang ingin dicapai (misal: Rp 50.000.000)
   current_amount: number; // Jumlah yang sudah terkumpul saat ini
-  target_date?: string;
+  deadline_date?: string; // Tanggal target pencapaian (YYYY-MM atau YYYY-MM-DD)
+  auto_calculate_monthly?: boolean; // Jika true, sistem otomatis menghitung target bulanan
+  target_date?: string; // legacy support
   category_icon?: string;
   color?: string;
   is_default_preset?: boolean;

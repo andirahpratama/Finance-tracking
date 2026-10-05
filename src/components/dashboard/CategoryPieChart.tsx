@@ -3,6 +3,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { Transaction } from '../../types';
 import { formatRupiah } from '../../lib/formatters';
 import { CategoryIcon } from '../ui/CategoryIcon';
+import { isSavingsTransaction } from '../../lib/savingsUtils';
 
 interface CategoryPieChartProps {
   transactions: Transaction[];
@@ -16,15 +17,16 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = ({ transactions
   const [activeType, setActiveType] = useState<ViewType>('all');
   const [periodFilter, setPeriodFilter] = useState<PeriodType>('this_month');
 
-  // Filter transactions based on periodFilter
+  // Filter transactions based on periodFilter (excluding internal savings transfers)
   const activeTransactions = useMemo(() => {
-    if (periodFilter === 'all') return transactions;
+    const nonSavings = transactions.filter((t) => !isSavingsTransaction(t));
+    if (periodFilter === 'all') return nonSavings;
 
     const now = new Date();
     const curYear = now.getFullYear();
     const curMonth = now.getMonth();
 
-    return transactions.filter((t) => {
+    return nonSavings.filter((t) => {
       const [yStr, mStr] = t.date.split('T')[0].split('-');
       const y = parseInt(yStr, 10);
       const m = parseInt(mStr, 10) - 1;

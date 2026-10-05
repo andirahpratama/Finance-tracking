@@ -16,6 +16,7 @@ import {
 import { Transaction } from '../../types';
 import { formatCompactRupiah, formatRupiah } from '../../lib/formatters';
 import { useFinance } from '../../context/FinanceContext';
+import { isSavingsTransaction } from '../../lib/savingsUtils';
 import { CalendarDays, BarChart3, ChevronLeft, ChevronRight, Sun } from 'lucide-react';
 
 type ChartTab = 'daily' | 'monthly' | 'yearly';
@@ -57,11 +58,12 @@ export const CashflowChart: React.FC<CashflowChartProps> = ({ transactions }) =>
       return y === year && m === month && d === day;
     });
 
-    const inc = dayTx.filter((t) => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
-    const exp = dayTx.filter((t) => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
+    const nonSavingsDayTx = dayTx.filter((t) => !isSavingsTransaction(t));
+    const inc = nonSavingsDayTx.filter((t) => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
+    const exp = nonSavingsDayTx.filter((t) => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
 
     const catMap: Record<string, { label: string; income: number; expense: number }> = {};
-    dayTx.forEach((t) => {
+    nonSavingsDayTx.forEach((t) => {
       const catName = t.category_name || 'Lainnya';
       if (!catMap[catName]) {
         catMap[catName] = { label: catName, income: 0, expense: 0 };
@@ -92,6 +94,8 @@ export const CashflowChart: React.FC<CashflowChartProps> = ({ transactions }) =>
     }
 
     transactions.forEach((t) => {
+      if (isSavingsTransaction(t)) return;
+
       const parts = t.date.split('T')[0].split('-');
       const y = parseInt(parts[0], 10);
       const m = parseInt(parts[1], 10) - 1;

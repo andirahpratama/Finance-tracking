@@ -4,13 +4,18 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Category, Transaction, TransactionType, YearlyCashflowSummary, MonthlyCashflowItem, BalanceThresholds, SavingsTargetItem, SavingsActionType, CurrencyCode } from '../types';
 import { INITIAL_CATEGORIES, getInitialDemoTransactions, DEFAULT_INCOME_CATEGORIES, DEFAULT_EXPENSE_CATEGORIES } from '../lib/defaultData';
 import { getAppCurrency, setAppCurrency as setGlobalAppCurrency } from '../lib/formatters';
+import { isSavingsTransaction, calculateSavingsProgress } from '../lib/savingsUtils';
+
+const currentYearNow = new Date().getFullYear();
 
 export const DEFAULT_SAVINGS_TARGETS: SavingsTargetItem[] = [
   {
     id: 'preset-liburan',
     name: 'Tabungan Liburan',
-    target_amount: 1000000,
+    target_amount: 15000000,
     current_amount: 0,
+    deadline_date: `${currentYearNow}-12-31`,
+    auto_calculate_monthly: true,
     category_icon: 'Palmtree',
     color: '#06b6d4',
     is_default_preset: true,
@@ -18,8 +23,10 @@ export const DEFAULT_SAVINGS_TARGETS: SavingsTargetItem[] = [
   {
     id: 'preset-pendidikan',
     name: 'Tabungan Pendidikan',
-    target_amount: 2000000,
+    target_amount: 35000000,
     current_amount: 0,
+    deadline_date: `${currentYearNow + 2}-07-31`,
+    auto_calculate_monthly: true,
     category_icon: 'GraduationCap',
     color: '#3b82f6',
     is_default_preset: true,
@@ -27,8 +34,10 @@ export const DEFAULT_SAVINGS_TARGETS: SavingsTargetItem[] = [
   {
     id: 'preset-darurat',
     name: 'Tabungan Dana Darurat',
-    target_amount: 1500000,
+    target_amount: 25000000,
     current_amount: 0,
+    deadline_date: `${currentYearNow + 1}-12-31`,
+    auto_calculate_monthly: true,
     category_icon: 'ShieldAlert',
     color: '#10b981',
     is_default_preset: true,
@@ -36,8 +45,10 @@ export const DEFAULT_SAVINGS_TARGETS: SavingsTargetItem[] = [
   {
     id: 'preset-pensiun',
     name: 'Tabungan Pensiun',
-    target_amount: 2500000,
+    target_amount: 100000000,
     current_amount: 0,
+    deadline_date: `${currentYearNow + 5}-12-31`,
+    auto_calculate_monthly: true,
     category_icon: 'PiggyBank',
     color: '#8b5cf6',
     is_default_preset: true,
@@ -199,6 +210,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           amount: Number(t.amount),
           date: t.date,
           notes: t.notes || '',
+          is_savings_transfer: isSavingsTransaction(t),
           created_at: t.created_at,
         }));
         setTransactions(formattedTx);
@@ -405,6 +417,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       amount,
       date: date || new Date().toISOString().split('T')[0],
       notes: txNotes,
+      is_savings_transfer: true,
+      savings_target_id: targetItem.id,
+      savings_action: action,
     });
 
     return { error: null };
@@ -536,6 +551,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
             amount: Number(data.amount),
             date: data.date,
             notes: data.notes || '',
+            is_savings_transfer: tx.is_savings_transfer ?? isSavingsTransaction({ ...data, notes: data.notes || tx.notes }),
+            savings_target_id: tx.savings_target_id,
+            savings_action: tx.savings_action,
             created_at: data.created_at,
           };
           setTransactions(prev => [newTx, ...prev]);
@@ -552,6 +570,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         category_name: selectedCategory?.name || 'Tabungan',
         category_icon: selectedCategory?.icon || 'PiggyBank',
         category_color: selectedCategory?.color || '#06B6D4',
+        is_savings_transfer: tx.is_savings_transfer ?? isSavingsTransaction(tx as any),
+        savings_target_id: tx.savings_target_id,
+        savings_action: tx.savings_action,
         created_at: new Date().toISOString(),
       };
       const updated = [newTx, ...transactions];
@@ -723,12 +744,15 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     yearlySavingsProgress,
     availableYears,
   } = useMemo(() => {
-    let inc = 0;
-    let exp = 0;
-    let mInc = 0;
-    let mExp = 0;
-    let yInc = 0;
-    let yExp = 0;
+    let pureInc = 0;
+    let pureExp = 0;
+    let mPureInc = 0;
+    let mPureExp = 0;
+    let yPureInc = 0;
+    let yPureExp = 0;
+
+    let totalSavingsDeposit = 0;
+    let totalSavingsWithdraw = 0;
 
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth();
@@ -736,11 +760,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     transactions.forEach(t => {
       const amount = Number(t.amount) || 0;
-      if (t.type === 'income') {
-        inc += amount;
-      } else {
-        exp += amount;
-      }
+      const isSav = isSavingsTransaction(t);
+      const isDeposit = t.notes?.includes('Setor') || t.savings_action === 'deposit' || (isSav && t.type === 'expense');
+      const isWithdraw = t.notes?.includes('Tarik') || t.savings_action === 'withdraw' || (isSav && t.type === 'income');
 
       const [yStr, mStr] = t.date.split('T')[0].split('-');
       const txYear = parseInt(yStr, 10);
@@ -750,43 +772,61 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         yearsSet.add(txYear);
       }
 
-      if (txYear === currentYear && txMonth === currentMonth) {
-        if (t.type === 'income') {
-          mInc += amount;
-        } else {
-          mExp += amount;
+      if (isSav) {
+        if (isDeposit) {
+          totalSavingsDeposit += amount;
+        } else if (isWithdraw) {
+          totalSavingsWithdraw += amount;
         }
-      }
-
-      if (txYear === currentYear) {
+      } else {
         if (t.type === 'income') {
-          yInc += amount;
+          pureInc += amount;
         } else {
-          yExp += amount;
+          pureExp += amount;
+        }
+
+        if (txYear === currentYear && txMonth === currentMonth) {
+          if (t.type === 'income') {
+            mPureInc += amount;
+          } else {
+            mPureExp += amount;
+          }
+        }
+
+        if (txYear === currentYear) {
+          if (t.type === 'income') {
+            yPureInc += amount;
+          } else {
+            yPureExp += amount;
+          }
         }
       }
     });
 
-    const bal = inc - exp;
-    const rate = inc > 0 ? Math.max(0, Math.round(((inc - exp) / inc) * 100)) : 0;
-    const mSavings = mInc - mExp;
+    // Saldo kas utama berkurang saat setor ke pos tabungan dan bertambah saat tarik tabungan
+    const bal = pureInc - pureExp - totalSavingsDeposit + totalSavingsWithdraw;
+    const rate = pureInc > 0 ? Math.max(0, Math.round(((pureInc - pureExp) / pureInc) * 100)) : 0;
+    const mSavings = mPureInc - mPureExp;
 
-    // Calculate monthly savings target total from active target items
-    const totalMonthlyTargetFromItems = savingsTargets.reduce((sum, item) => sum + (item.target_amount || 0), 0);
+    // Hitung total target bulanan dari semua pos tabungan aktif berdasarkan formula deadline
+    const totalMonthlyTargetFromItems = savingsTargets.reduce((sum, item) => {
+      const prog = calculateSavingsProgress(item);
+      return sum + prog.monthlyTarget;
+    }, 0);
     const activeMonthlyTarget = totalMonthlyTargetFromItems > 0 ? totalMonthlyTargetFromItems : monthlySavingsTarget;
 
     const mSavingsProgress = activeMonthlyTarget > 0 ? Math.round((mSavings / activeMonthlyTarget) * 100) : 0;
 
-    const ySavings = yInc - yExp;
+    const ySavings = yPureInc - yPureExp;
     const yTarget = activeMonthlyTarget * 12;
     const ySavingsProgress = yTarget > 0 ? Math.round((ySavings / yTarget) * 100) : 0;
 
     return {
-      totalIncome: inc,
-      totalExpense: exp,
+      totalIncome: pureInc,
+      totalExpense: pureExp,
       totalBalance: bal,
-      thisMonthIncome: mInc,
-      thisMonthExpense: mExp,
+      thisMonthIncome: mPureInc,
+      thisMonthExpense: mPureExp,
       thisMonthSavings: mSavings,
       savingsRate: rate,
       thisMonthSavingsProgress: mSavingsProgress,
@@ -814,6 +854,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       let totalYExp = 0;
 
       transactions.forEach(t => {
+        // Exclude savings transfers so they don't distort operational cashflow chart
+        if (isSavingsTransaction(t)) return;
+
         const [yStr, mStr] = t.date.split('T')[0].split('-');
         const txYear = parseInt(yStr, 10);
         const txMonth = parseInt(mStr, 10) - 1;

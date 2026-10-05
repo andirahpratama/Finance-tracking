@@ -5,6 +5,7 @@ import { Edit2, Trash2, Calendar, AlertCircle, BookmarkCheck } from 'lucide-reac
 import { Transaction } from '../../types';
 import { CategoryIcon } from '../ui/CategoryIcon';
 import { formatDateIndo, formatRupiah, formatNotesForDisplay } from '../../lib/formatters';
+import { isSavingsTransaction } from '../../lib/savingsUtils';
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -118,6 +119,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                     </span>
                     {(() => {
                       const isSavings =
+                        isSavingsTransaction(t) ||
                         (t.category_name || '').toLowerCase().includes('tabungan') ||
                         (t.notes || '').toLowerCase().includes('tabungan') ||
                         t.category_icon === 'PiggyBank';
@@ -131,7 +133,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                                 : 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-300 border-cyan-500/20'
                             }`}
                           >
-                            {isIncome ? 'Tarik Tabungan (+)' : 'Setor Tabungan (-)'}
+                            {isIncome ? 'Transfer Kas: Tarik (+)' : 'Transfer Kas: Setor (-)'}
                           </span>
                         );
                       }
