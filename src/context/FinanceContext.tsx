@@ -6,6 +6,7 @@ import { INITIAL_CATEGORIES, getInitialDemoTransactions, DEFAULT_INCOME_CATEGORI
 import { getAppCurrency, setAppCurrency as setGlobalAppCurrency } from '../lib/formatters';
 import { isSavingsTransaction, calculateSavingsProgress } from '../lib/savingsUtils';
 import { fetchLiveGoldPrices, calculateGoldPortfolio, saveStoredManualPrices, clearStoredManualPrices, DEFAULT_GOLD_PRICES, isGoldPriceStale } from '../lib/goldPriceService';
+import { getStoredAgentApiKey } from '../lib/agentApiKey';
 
 const currentYearNow = new Date().getFullYear();
 
@@ -903,6 +904,57 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     localStorage.setItem(getStorageKey('transactions'), JSON.stringify(updated));
     return { error: null };
   };
+
+  // AI AGENT & MCP AUTO-SYNC POLLER
+  // Automatically imports transactions recorded remotely by external AI assistants (Claude, Cursor, Siri, etc.)
+  useEffect(() => {
+    if (!user) return;
+    const apiKey = getStoredAgentApiKey(user.id);
+
+    const checkAgentPendingQueue = async () => {
+      try {
+        const res = await fetch(`/api/agent?action=pending&apiKey=${encodeURIComponent(apiKey)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data && data.success && Array.isArray(data.items) && data.items.length > 0) {
+          for (const item of data.items) {
+            const matchedCat = categories.find(c => c.name.toLowerCase() === (item.category_name || '').toLowerCase() && c.type === item.type);
+            const fallbackCat = categories.find(c => c.type === item.type) || categories[0];
+            await addTransaction({
+              type: item.type,
+              amount: item.amount,
+              category_id: matchedCat?.id || fallbackCat?.id || 'cat-custom-agent',
+              date: item.date || new Date().toISOString().split('T')[0],
+              notes: item.notes || 'Dicatat oleh AI Agent',
+            });
+          }
+
+          // Acknowledge queue cleared
+          await fetch(`/api/agent?action=pending&apiKey=${encodeURIComponent(apiKey)}`, {
+            method: 'POST',
+          });
+        }
+      } catch {
+        // quiet error
+      }
+    };
+
+    const handleVis = () => {
+      if (document.visibilityState === 'visible') {
+        checkAgentPendingQueue();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVis);
+
+    // Initial check + periodic check every 20 seconds
+    checkAgentPendingQueue();
+    const timer = setInterval(checkAgentPendingQueue, 20000);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVis);
+      clearInterval(timer);
+    };
+  }, [user, categories]);
 
   const resetToDefaultData = () => {
     if (!user) return;
