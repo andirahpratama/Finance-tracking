@@ -8,7 +8,6 @@ import {
 } from 'lucide-react';
 import { Transaction } from '../../types';
 import { formatRupiah, formatDateFullIndo } from '../../lib/formatters';
-import { isSavingsTransaction } from '../../lib/savingsUtils';
 import { CategoryIcon } from '../ui/CategoryIcon';
 
 interface MonthlyActivityCalendarProps {
@@ -30,7 +29,7 @@ const WEEKDAYS = [
 /**
  * Format expense compactly as shown in the design mockup:
  * - >= 1,000,000,000 => -X.XM
- * - >= 1,000,000 => -X.XJT or -XJT
+ * - >= 1,000,000 => -X.XXJT, -X.XJT or -XJT
  * - >= 1,000 => -XRB
  * - < 1,000 => -X
  */
@@ -39,11 +38,11 @@ export function formatCalendarExpense(amount: number): string {
   const abs = Math.abs(amount);
 
   if (abs >= 1_000_000_000) {
-    const val = (abs / 1_000_000_000).toFixed(1).replace(/\.0$/, '');
+    const val = (abs / 1_000_000_000).toFixed(2).replace(/\.?0+$/, '');
     return `-${val}M`;
   }
   if (abs >= 1_000_000) {
-    const val = (abs / 1_000_000).toFixed(1).replace(/\.0$/, '');
+    const val = (abs / 1_000_000).toFixed(2).replace(/\.?0+$/, '');
     return `-${val}JT`;
   }
   if (abs >= 1_000) {
@@ -52,6 +51,32 @@ export function formatCalendarExpense(amount: number): string {
   }
   return `-${abs}`;
 }
+
+const parseDateParts = (dateStr?: string) => {
+  if (!dateStr) return null;
+  const clean = String(dateStr).trim().split(/[T\s]/)[0];
+  const parts = clean.split(/[-/]/);
+  if (parts.length < 3) return null;
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10) - 1; // 0-indexed
+  const d = parseInt(parts[2], 10);
+  if (isNaN(y) || isNaN(m) || isNaN(d)) return null;
+  return { year: y, month: m, day: d };
+};
+
+const parseAmount = (val: any): number => {
+  if (typeof val === 'number') return isNaN(val) ? 0 : val;
+  if (!val) return 0;
+  const str = String(val).trim();
+  if (str.includes('.') && !str.includes(',')) {
+    const parts = str.split('.');
+    if (parts.length > 1 && parts[parts.length - 1].length === 3) {
+      return parseInt(str.replace(/\./g, ''), 10) || 0;
+    }
+  }
+  const num = Number(str);
+  return isNaN(num) ? 0 : num;
+};
 
 export const MonthlyActivityCalendar: React.FC<MonthlyActivityCalendarProps> = ({
   transactions,
@@ -107,22 +132,20 @@ export const MonthlyActivityCalendar: React.FC<MonthlyActivityCalendarProps> = (
     const map = new Map<string, { totalExpense: number; totalIncome: number; transactions: Transaction[] }>();
 
     transactions.forEach((tx) => {
-      if (!tx.date) return;
-      const [yStr, mStr, dStr] = tx.date.split('T')[0].split('-');
-      const y = parseInt(yStr, 10);
-      const m = parseInt(mStr, 10) - 1; // 0-indexed
-      const d = parseInt(dStr, 10);
+      const dateInfo = parseDateParts(tx?.date);
+      if (!dateInfo) return;
 
-      if (y === currentYear && m === currentMonth) {
-        const key = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      if (dateInfo.year === currentYear && dateInfo.month === currentMonth) {
+        const key = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(dateInfo.day).padStart(2, '0')}`;
         const existing = map.get(key) || { totalExpense: 0, totalIncome: 0, transactions: [] };
         
-        const amount = Number(tx.amount) || 0;
-        const isSav = isSavingsTransaction(tx);
+        const amount = parseAmount(tx.amount);
+        const txType = (tx.type || '').toLowerCase();
 
-        if (tx.type === 'expense' && !isSav) {
+        // Count every expense transaction inputted for this day
+        if (txType === 'expense') {
           existing.totalExpense += amount;
-        } else if (tx.type === 'income' && !isSav) {
+        } else if (txType === 'income') {
           existing.totalIncome += amount;
         }
 
@@ -332,15 +355,20 @@ export const MonthlyActivityCalendar: React.FC<MonthlyActivityCalendarProps> = (
                 <h4 className="text-sm font-bold text-slate-900 dark:text-white">
                   {formatDateFullIndo(selectedDayInfo.dateStr)}
                 </h4>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs mt-0.5">
                   {selectedDayInfo.totalExpense > 0 ? (
-                    <span className="text-rose-600 dark:text-rose-400 font-semibold">
+                    <span className="text-rose-600 dark:text-rose-400 font-bold">
                       Total Pengeluaran: {formatRupiah(selectedDayInfo.totalExpense)}
                     </span>
                   ) : (
-                    <span>Tidak ada catatan pengeluaran</span>
+                    <span className="text-slate-500 dark:text-slate-400">Tidak ada pengeluaran</span>
                   )}
-                </p>
+                  {selectedDayInfo.totalIncome > 0 && (
+                    <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                      • Pemasukan: {formatRupiah(selectedDayInfo.totalIncome)}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -371,7 +399,7 @@ export const MonthlyActivityCalendar: React.FC<MonthlyActivityCalendarProps> = (
           <div className="mt-3 space-y-2">
             {selectedDayInfo.transactions.length > 0 ? (
               selectedDayInfo.transactions.map((tx) => {
-                const isExpense = tx.type === 'expense';
+                const isExpense = (tx.type || '').toLowerCase() === 'expense';
                 return (
                   <div
                     key={tx.id}
