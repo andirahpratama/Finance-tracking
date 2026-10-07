@@ -8,6 +8,7 @@ import { AnimatedMascot } from './components/mascot/AnimatedMascot';
 import { StatCard } from './components/dashboard/StatCard';
 import { SavingsTargetCard } from './components/dashboard/SavingsTargetCard';
 import { SavingsTargetModal } from './components/dashboard/SavingsTargetModal';
+import { MonthlyActivityCalendar } from './components/dashboard/MonthlyActivityCalendar';
 import { CashflowChart } from './components/dashboard/CashflowChart';
 import { CategoryPieChart } from './components/dashboard/CategoryPieChart';
 import { TransactionList } from './components/transactions/TransactionList';
@@ -70,6 +71,7 @@ export const App: React.FC = () => {
   // Modals state
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
   const [transactionModalType, setTransactionModalType] = useState<TransactionType | 'savings'>('expense');
+  const [transactionModalDate, setTransactionModalDate] = useState<string | undefined>(undefined);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -271,9 +273,10 @@ export const App: React.FC = () => {
     setIsTransactionModalOpen(true);
   };
 
-  const handleOpenExpense = () => {
+  const handleOpenExpense = (customDate?: string | React.MouseEvent) => {
     setEditingTransaction(null);
     setTransactionModalType('expense');
+    setTransactionModalDate(typeof customDate === 'string' ? customDate : undefined);
     setIsTransactionModalOpen(true);
   };
 
@@ -368,6 +371,13 @@ export const App: React.FC = () => {
                 subtitle={thisMonthExpense === 0 ? 'Awal bulan (Belum ada input)' : `Total Riwayat: ${formatRupiah(totalExpense)}`}
               />
             </div>
+
+            {/* Kalender Aktivitas Pengeluaran Bulan Ini */}
+            <MonthlyActivityCalendar
+              transactions={transactions}
+              onOpenAddExpense={(dateStr) => handleOpenExpense(dateStr)}
+              onEditTransaction={handleEditTransaction}
+            />
 
             {/* Savings Target Progress Card (Shown on Home tab if user has configured savings targets) */}
             {savingsTargets.length > 0 && (
@@ -587,10 +597,14 @@ export const App: React.FC = () => {
       {/* Modals */}
       <TransactionModal
         isOpen={isTransactionModalOpen}
-        onClose={() => setIsTransactionModalOpen(false)}
+        onClose={() => {
+          setIsTransactionModalOpen(false);
+          setTransactionModalDate(undefined);
+        }}
         initialType={transactionModalType}
         editingTransaction={editingTransaction}
         onOpenCategoryManager={() => setIsCategoryModalOpen(true)}
+        initialDate={transactionModalDate}
       />
 
       <CategoryManagerModal

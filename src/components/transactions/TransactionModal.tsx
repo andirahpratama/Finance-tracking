@@ -14,6 +14,7 @@ interface TransactionModalProps {
   initialType?: TransactionType | 'savings';
   editingTransaction?: Transaction | null;
   onOpenCategoryManager?: () => void;
+  initialDate?: string;
 }
 
 export const TransactionModal: React.FC<TransactionModalProps> = ({
@@ -22,6 +23,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   initialType = 'expense',
   editingTransaction,
   onOpenCategoryManager,
+  initialDate,
 }) => {
   const { categories, savingsTargets, addTransaction, updateTransaction, recordSavingsTransaction, appCurrency } = useFinance();
 
@@ -31,7 +33,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
   const [amountRaw, setAmountRaw] = useState<string>('');
   const [categoryId, setCategoryId] = useState<string>('');
-  const [date, setDate] = useState<string>(getTodayDateInput());
+  const [date, setDate] = useState<string>(initialDate || getTodayDateInput());
   const [notes, setNotes] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
@@ -46,7 +48,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     } else {
       setInputMode(initialType as InputModeType);
       setAmountRaw('');
-      setDate(getTodayDateInput());
+      setDate(initialDate || getTodayDateInput());
       setNotes('');
 
       if (initialType === 'savings') {
@@ -61,7 +63,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       }
     }
     setErrorMsg('');
-  }, [editingTransaction, initialType, isOpen, categories, savingsTargets]);
+  }, [editingTransaction, initialType, isOpen, initialDate, categories, savingsTargets]);
 
   useEffect(() => {
     if (savingsTargets.length > 0 && !selectedSavingsTargetId) {
