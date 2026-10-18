@@ -878,7 +878,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     Riwayat Log Aktivitas Ping Supabase
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Catatan aktivitas ping otomatis dan manual yang tersimpan di sistem
+                    Riwayat ping otomatis dan manual di browser ini. Eksekusi cron server tercatat di log Vercel.
                   </p>
                 </div>
 

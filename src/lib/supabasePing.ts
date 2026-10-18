@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured, supabaseUrl, supabaseAnonKey } from './supabase';
+import { supabase, isSupabaseConfigured, supabaseUrl } from './supabase';
 import { SupabasePingLog, SupabasePingStatus, PingTriggerType } from '../types';
 
 const LAST_PING_KEY = 'ft_supabase_last_ping';
@@ -66,7 +66,10 @@ export const clearPingHistory = (): void => {
  */
 const savePingLog = (log: SupabasePingLog): void => {
   try {
-    localStorage.setItem(LAST_PING_KEY, Date.now().toString());
+    // Failed attempts must not postpone the next successful keep-alive.
+    if (log.status === 'success') {
+      localStorage.setItem(LAST_PING_KEY, Date.now().toString());
+    }
     const current = getPingHistory();
     const updated = [log, ...current].slice(0, 25); // Simpan maks 25 entri terakhir
     localStorage.setItem(PING_HISTORY_KEY, JSON.stringify(updated));
@@ -105,38 +108,12 @@ export const pingSupabase = async (
     const { error: queryError } = await supabase
       .from('categories')
       .select('id')
-      .limit(1);
+      .limit(1)
+      .abortSignal(AbortSignal.timeout(10000));
 
     const latencyMs = Math.round(performance.now() - start);
 
-    if (queryError && !queryError.message.includes('0 rows')) {
-      // Jika ada error pada query tabel, coba fallback ke REST OpenAPI root endpoint
-      try {
-        const restResponse = await fetch(`${supabaseUrl}/rest/v1/`, {
-          method: 'GET',
-          headers: {
-            apikey: supabaseAnonKey,
-            Authorization: `Bearer ${supabaseAnonKey}`,
-          },
-        });
-
-        if (restResponse.ok || restResponse.status === 200) {
-          const successLog: SupabasePingLog = {
-            id: 'ping-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
-            timestamp,
-            trigger,
-            status: 'success',
-            latencyMs,
-            message: 'Koneksi aktif via Supabase REST API endpoint.',
-            statusCode: restResponse.status,
-          };
-          savePingLog(successLog);
-          return successLog;
-        }
-      } catch (fallbackErr: any) {
-        // Abaikan dan gunakan error pertama
-      }
-
+    if (queryError) {
       const failLog: SupabasePingLog = {
         id: 'ping-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
         timestamp,
@@ -182,6 +159,10 @@ export const pingSupabase = async (
  * Mengecek apakah sudah waktunya (3 hari sekali) untuk melakukan ping otomatis
  * Jika ya, jalankan ping secara silent di background
  */
+let autoPingInFlight = false;
+let lastAutoAttempt = 0;
+const AUTO_RETRY_DELAY_MS = 5 * 60 * 1000;
+
 export const checkAndTriggerAutoPing = async (): Promise<boolean> => {
   if (!isSupabaseConfigured()) {
     return false;
@@ -189,14 +170,19 @@ export const checkAndTriggerAutoPing = async (): Promise<boolean> => {
 
   const last = getLastPingTime();
   const now = Date.now();
+  if (autoPingInFlight || (lastAutoAttempt > 0 && now - lastAutoAttempt < AUTO_RETRY_DELAY_MS)) return false;
 
   // Jika belum pernah ping atau selisih >= 3 hari (259.200.000 ms)
   if (!last || now - last >= AUTO_PING_INTERVAL_MS) {
+    autoPingInFlight = true;
+    lastAutoAttempt = now;
     try {
-      await pingSupabase('auto');
-      return true;
+      const log = await pingSupabase('auto');
+      return log.status === 'success';
     } catch (e) {
       console.warn('Auto ping notice:', e);
+    } finally {
+      autoPingInFlight = false;
     }
   }
 

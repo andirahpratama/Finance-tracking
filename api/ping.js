@@ -1,73 +1,46 @@
-// Vercel Serverless Function & Cron Job Handler for Supabase Keep-Alive
-// Dipanggil otomatis oleh Vercel Cron setiap 3 hari sekali (schedule: "0 0 */3 * *")
-
+// Vercel Cron runs this DB query even when nobody opens the app.
 export default async function handler(req, res) {
   const start = Date.now();
-  const rawUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || 'https://ynmrprqflgewraqbcigt.supabase.co';
-  const anonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlubXJwcnFmbGdld3JhcWJjaWd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODczNDk3MDEsImV4cCI6MjEwMjkyNTcwMX0.fQhvf_OBsjXm58t4Eh_7kFgXy6VhQewwP8ZElrep6Ls';
-
-  const baseUrl = rawUrl
-    .trim()
-    .replace(/\/rest\/v1\/?$/, '')
-    .replace(/\/auth\/v1\/?$/, '')
-    .replace(/\/+$/, '');
-
-  try {
-    // 1. Eksekusi query ringan ke REST API Supabase (categories)
-    const targetUrl = `${baseUrl}/rest/v1/categories?select=id&limit=1`;
-    const response = await fetch(targetUrl, {
-      method: 'GET',
-      headers: {
-        apikey: anonKey,
-        Authorization: `Bearer ${anonKey}`,
-      },
-    });
-
-    const latencyMs = Date.now() - start;
-
-    if (!response.ok) {
-      // Coba fallback ke root REST OpenAPI endpoint
-      const rootRes = await fetch(`${baseUrl}/rest/v1/`, {
-        headers: {
-          apikey: anonKey,
-          Authorization: `Bearer ${anonKey}`,
-        },
+  res.setHeader('Cache-Control', 'no-store');
+  if (req.method !== 'GET') {
+    res.setHeader('Allow', 'GET');
+    return res.status(405).json({ success: false, error: 'Method not allowed' });
+  }
+  if (process.env.CRON_SECRET && req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
+    return res.status(401).json({ success: false, error: 'Unauthorized' });
+  }
+  const baseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '')
+    .trim().replace(/\/(rest|auth)\/v1\/?$/, '').replace(/\/+$/, '');
+  const anonKey = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '').trim();
+  const result = (status, body) => res.status(status).json({
+    success: status === 200,
+    trigger: req.headers['user-agent']?.startsWith('vercel-cron/') ? 'vercel-cron' : 'manual',
+    timestamp: new Date().toISOString(),
+    latencyMs: Date.now() - start,
+    ...body,
+  });
+  if (!baseUrl || !anonKey) {
+    return result(503, { error: 'Supabase environment variables are missing' });
+  }
+  // Retry transient failures once. Each request is bounded to 8 seconds.
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const response = await fetch(`${baseUrl}/rest/v1/categories?select=id&limit=1`, {
+        headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
+        signal: AbortSignal.timeout(8000),
+        cache: 'no-store',
       });
-
-      if (rootRes.ok) {
-        return res.status(200).json({
-          success: true,
-          trigger: 'vercel-cron',
-          timestamp: new Date().toISOString(),
-          latencyMs,
-          message: 'Supabase REST API keep-alive ping successful (root endpoint)',
-        });
+      if (!response.ok) {
+        if ((response.status >= 500 || response.status === 429) && attempt < 2) continue;
+        return result(502, { error: 'Supabase database query failed', upstreamStatus: response.status, attempts: attempt });
       }
-
-      return res.status(response.status).json({
-        success: false,
-        trigger: 'vercel-cron',
-        timestamp: new Date().toISOString(),
-        latencyMs,
-        error: `Supabase returned status code ${response.status}`,
-      });
+      const rows = await response.json();
+      if (!Array.isArray(rows)) {
+        return result(502, { error: 'Unexpected Supabase query response', attempts: attempt });
+      }
+      return result(200, { message: 'Supabase keep-alive database query successful', attempts: attempt });
+    } catch {
+      if (attempt === 2) return result(502, { error: 'Supabase query timed out or could not be completed', attempts: attempt });
     }
-
-    return res.status(200).json({
-      success: true,
-      trigger: 'vercel-cron',
-      timestamp: new Date().toISOString(),
-      latencyMs,
-      message: 'Supabase keep-alive ping successful via PostgreSQL query',
-    });
-  } catch (error) {
-    const latencyMs = Date.now() - start;
-    return res.status(500).json({
-      success: false,
-      trigger: 'vercel-cron',
-      timestamp: new Date().toISOString(),
-      latencyMs,
-      error: error?.message || 'Network error during ping',
-    });
   }
 }

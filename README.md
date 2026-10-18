@@ -106,6 +106,15 @@ git push -u origin main
 
 ---
 
+## Autoping Supabase
+
+- Vercel Cron production memanggil `GET /api/ping` pada `0 0 */3 * *` (UTC): tanggal 1, 4, 7, dan seterusnya setiap bulan, sekitar pukul 07.00 WIB. Jadwal mengikuti tanggal kalender, bukan interval tepat 72 jam.
+- Cron berjalan tanpa browser terbuka. Pastikan Cron Jobs aktif di pengaturan proyek Vercel. Konfigurasi baru berlaku setelah deployment production.
+- Endpoint memakai `SUPABASE_URL` / `SUPABASE_ANON_KEY`, atau variabel `VITE_SUPABASE_*` yang sudah digunakan aplikasi. Opsional: atur `CRON_SECRET` di Vercel untuk membatasi akses endpoint; Vercel menyertakan bearer token secara otomatis.
+- Sukses hanya dilaporkan jika kueri `categories?select=id&limit=1` berhasil. Respons kosong akibat RLS tetap valid. Request dibatasi 8 detik dan kegagalan sementara dicoba ulang sekali.
+- Browser juga melakukan ping setiap 3 hari sejak sukses terakhir. Jika gagal, timestamp sukses dipertahankan dan pengecekan berikutnya berjalan setiap 5 menit selama tab terbuka. Riwayat browser terpisah dari log cron Vercel.
+- Verifikasi: `npm test`, `npm run build`, lalu panggil endpoint production. Periksa eksekusi terjadwal melalui log Vercel. Keep-alive tidak menjamin layanan tidak pernah dipause oleh penyedia.
+
 ## 📦 Struktur Direktori Proyek
 
 ```

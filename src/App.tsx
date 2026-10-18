@@ -118,10 +118,10 @@ export const App: React.FC = () => {
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // 3. Pengecekan berkala setiap 1 jam jika tab dibiarkan tetap terbuka
+    // Retry failed pings on the next check; successful pings remain 3 days apart.
     const intervalTimer = setInterval(() => {
       checkAndTriggerAutoPing();
-    }, 60 * 60 * 1000);
+    }, 5 * 60 * 1000);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
