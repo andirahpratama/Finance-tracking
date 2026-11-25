@@ -5,6 +5,10 @@ import { Navbar } from './components/layout/Navbar';
 import { Footer } from './components/layout/Footer';
 import { MobileBottomNav, TabType } from './components/layout/MobileBottomNav';
 import { AnimatedMascot } from './components/mascot/AnimatedMascot';
+import { VerdictCard } from './components/dashboard/VerdictCard';
+import { MonthlyBudgetHeroCard } from './components/dashboard/MonthlyBudgetHeroCard';
+import { MoneyTrailCard } from './components/dashboard/MoneyTrailCard';
+import { SmartTipsCard } from './components/dashboard/SmartTipsCard';
 import { StatCard } from './components/dashboard/StatCard';
 import { SavingsTargetCard } from './components/dashboard/SavingsTargetCard';
 import { SavingsTargetModal } from './components/dashboard/SavingsTargetModal';
@@ -21,14 +25,16 @@ import { ProfileSettingsModal } from './components/profile/ProfileSettingsModal'
 import { FeedbackModal } from './components/profile/FeedbackModal';
 import { AdminLoginModal } from './components/admin/AdminLoginModal';
 import { AdminDashboard } from './components/admin/AdminDashboard';
+import { BudgetingPage } from './components/budgeting/BudgetingPage';
+import { InvestmentPage } from './components/invest/InvestmentPage';
+import { UtangPiutangPage } from './components/debt/UtangPiutangPage';
 import { exportTransactionsToCSV } from './lib/exportUtils';
 import { formatRupiah } from './lib/formatters';
 import { getAppSettings, applyFavicon } from './lib/appSettings';
 import { checkAndTriggerAutoPing } from './lib/supabasePing';
 import { isSavingsTransaction } from './lib/savingsUtils';
-import { FilterOptions, Transaction, TransactionType, AppSettings, SavingsTargetItem } from './types';
+import { FilterOptions, Transaction, TransactionType, AppSettings, SavingsTargetItem, SavingsActionType } from './types';
 import { SmartCalculators } from './components/calculators/SmartCalculators';
-import { GoldPortfolioDashboard } from './components/gold/GoldPortfolioDashboard';
 import {
   Wallet,
   TrendingUp,
@@ -37,10 +43,12 @@ import {
   ListOrdered,
   Plus,
   ArrowRight,
-  Receipt,
   Target,
   Calculator,
-  Coins,
+  PieChart,
+  HandCoins,
+  Printer,
+  Zap,
 } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -48,7 +56,7 @@ export const App: React.FC = () => {
   const {
     categories,
     transactions,
-    savingsTargets,
+    isLoading,
     totalIncome,
     totalExpense,
     totalBalance,
@@ -72,6 +80,8 @@ export const App: React.FC = () => {
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
   const [transactionModalType, setTransactionModalType] = useState<TransactionType | 'savings'>('expense');
   const [transactionModalDate, setTransactionModalDate] = useState<string | undefined>(undefined);
+  const [txModalSavingsTargetId, setTxModalSavingsTargetId] = useState<string | undefined>(undefined);
+  const [txModalSavingsAction, setTxModalSavingsAction] = useState<SavingsActionType | undefined>(undefined);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -79,6 +89,7 @@ export const App: React.FC = () => {
   const [savingsModalInitialData, setSavingsModalInitialData] = useState<Partial<SavingsTargetItem> | null>(null);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [profileInitialTab, setProfileInitialTab] = useState<'profile' | 'budgeting' | 'agent'>('profile');
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
 
   const handleCreateSavingsTargetFromCalc = (item: Partial<SavingsTargetItem>) => {
@@ -86,7 +97,6 @@ export const App: React.FC = () => {
     setIsSavingsTargetModalOpen(true);
   };
 
-  // URL Hash & Path listener for /admin hidden route & dynamic favicon application
   useEffect(() => {
     if (appSettings.customFavicon) {
       applyFavicon(appSettings.customFavicon);
@@ -107,10 +117,7 @@ export const App: React.FC = () => {
 
   // Keep-Alive Supabase: Auto Ping 3 Hari Sekali
   useEffect(() => {
-    // 1. Eksekusi pengecekan awal saat aplikasi dibuka
     checkAndTriggerAutoPing();
-
-    // 2. Jalankan pengecekan saat tab browser kembali aktif (visibilitychange)
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         checkAndTriggerAutoPing();
@@ -118,7 +125,6 @@ export const App: React.FC = () => {
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // Retry failed pings on the next check; successful pings remain 3 days apart.
     const intervalTimer = setInterval(() => {
       checkAndTriggerAutoPing();
     }, 5 * 60 * 1000);
@@ -143,7 +149,6 @@ export const App: React.FC = () => {
     setIsAdminAuthenticated(false);
   };
 
-  // Filters state (Default to 'monthly' with current date selections)
   const [filters, setFilters] = useState<FilterOptions>({
     searchTerm: '',
     type: 'all',
@@ -154,7 +159,6 @@ export const App: React.FC = () => {
     selectedDay: new Date().getDate(),
   });
 
-  // Opening balance carried over from prior dates ("Saldo dari periode sebelumnya")
   const openingBalance = useMemo(() => {
     if (filters.period === 'all') return 0;
 
@@ -243,22 +247,14 @@ export const App: React.FC = () => {
         const txDay = parseInt(parts[2], 10);
 
         if (filters.period === 'daily') {
-          if (txYear !== year || txMonth !== month || txDay !== day) {
-            return false;
-          }
+          if (txYear !== year || txMonth !== month || txDay !== day) return false;
         } else if (filters.period === 'monthly' || filters.period === 'this_month') {
-          if (txYear !== year || txMonth !== month) {
-            return false;
-          }
+          if (txYear !== year || txMonth !== month) return false;
         } else if (filters.period === 'last_month') {
           const lastMonth = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1);
-          if (txYear !== lastMonth.getFullYear() || txMonth !== lastMonth.getMonth()) {
-            return false;
-          }
+          if (txYear !== lastMonth.getFullYear() || txMonth !== lastMonth.getMonth()) return false;
         } else if (filters.period === 'yearly' || filters.period === 'this_year') {
-          if (txYear !== year) {
-            return false;
-          }
+          if (txYear !== year) return false;
         }
       }
 
@@ -266,22 +262,27 @@ export const App: React.FC = () => {
     });
   }, [transactions, filters]);
 
-  // Quick Open Modal Handlers
   const handleOpenIncome = () => {
     setEditingTransaction(null);
+    setTxModalSavingsTargetId(undefined);
+    setTxModalSavingsAction(undefined);
     setTransactionModalType('income');
     setIsTransactionModalOpen(true);
   };
 
   const handleOpenExpense = (customDate?: string | React.MouseEvent) => {
     setEditingTransaction(null);
+    setTxModalSavingsTargetId(undefined);
+    setTxModalSavingsAction(undefined);
     setTransactionModalType('expense');
     setTransactionModalDate(typeof customDate === 'string' ? customDate : undefined);
     setIsTransactionModalOpen(true);
   };
 
-  const handleOpenSavings = () => {
+  const handleOpenSavings = (targetId?: string, action?: SavingsActionType) => {
     setEditingTransaction(null);
+    setTxModalSavingsTargetId(targetId);
+    setTxModalSavingsAction(action);
     setTransactionModalType('savings');
     setIsTransactionModalOpen(true);
   };
@@ -298,6 +299,11 @@ export const App: React.FC = () => {
 
   const handlePrintReport = () => {
     setIsPrintModalOpen(true);
+  };
+
+  const openProfileSettings = (tab: 'profile' | 'budgeting' | 'agent' = 'profile') => {
+    setProfileInitialTab(tab);
+    setIsProfileModalOpen(true);
   };
 
   // Hidden Admin Route view
@@ -319,218 +325,314 @@ export const App: React.FC = () => {
     );
   }
 
+  // Daily allowance helper for Home StatCard
+  const now = new Date();
+  const totalDaysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const remainingDays = Math.max(1, totalDaysInMonth - now.getDate() + 1);
+  const dailyAllowance = Math.round(totalBalance / remainingDays);
+  const hasAnyTransactions = transactions.length > 0;
+
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col selection:bg-emerald-500 selection:text-white transition-colors duration-200">
-      {/* Top Navigation Bar with PC Floating Tab Header */}
+    <div className="min-h-screen bg-[#FAF8F2] dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col selection:bg-finance-500 selection:text-white transition-colors duration-200 overflow-x-hidden">
       <Navbar
         activeTab={activeTab}
         onSelectTab={setActiveTab}
         onOpenIncomeModal={handleOpenIncome}
         onOpenExpenseModal={handleOpenExpense}
-        onOpenSavingsModal={handleOpenSavings}
+        onOpenSavingsModal={() => handleOpenSavings()}
         onOpenCategoryManager={() => setIsCategoryModalOpen(true)}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
-        onOpenSavingsTargetModal={() => setIsSavingsTargetModalOpen(true)}
-        onOpenProfileSettings={() => setIsProfileModalOpen(true)}
+        onOpenSavingsTargetModal={() => {
+          setSavingsModalInitialData(null);
+          setIsSavingsTargetModalOpen(true);
+        }}
+        onOpenProfileSettings={() => openProfileSettings('profile')}
         onOpenFeedbackModal={() => setIsFeedbackModalOpen(true)}
         customLogo={appSettings.customLogo}
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-6 space-y-5 sm:space-y-6">
-        
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-6 pb-28 lg:pb-8 space-y-5 sm:space-y-6">
+
         {/* ================= 1. HOME TAB ================= */}
         {activeTab === 'home' && (
-          <div className="space-y-6 animate-in fade-in duration-300">
-            {/* Animated Mascot & Greeting */}
-            <AnimatedMascot balance={totalBalance} onOpenSettings={() => setIsProfileModalOpen(true)} />
-
-            {/* Home Only KPI Summary Cards Grid (Total Saldo, Total Pemasukan, Total Pengeluaran) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
-              <StatCard
-                title="Total Saldo Saat Ini"
-                amount={totalBalance}
-                icon={Wallet}
-                variant={totalBalance >= 0 ? 'emerald' : 'rose'}
-                subtitle={totalBalance >= 1000000 ? 'Zona Aman' : totalBalance >= 500000 ? 'Zona Waspada' : 'Zona Kritis'}
-                badge={totalBalance >= 0 ? 'Surplus' : 'Defisit'}
-                isNegative={totalBalance < 0}
-              />
-              <StatCard
-                title="Pemasukan Bulan Ini"
-                amount={thisMonthIncome}
-                icon={TrendingUp}
-                variant="emerald"
-                subtitle={thisMonthIncome === 0 ? 'Awal bulan (Belum ada input)' : `Total Riwayat: ${formatRupiah(totalIncome)}`}
-              />
-              <StatCard
-                title="Pengeluaran Bulan Ini"
-                amount={thisMonthExpense}
-                icon={TrendingDown}
-                variant="rose"
-                subtitle={thisMonthExpense === 0 ? 'Awal bulan (Belum ada input)' : `Total Riwayat: ${formatRupiah(totalExpense)}`}
-              />
-            </div>
-
-            {/* Kalender Aktivitas Pengeluaran Bulan Ini */}
-            <MonthlyActivityCalendar
-              transactions={transactions}
-              onOpenAddExpense={(dateStr) => handleOpenExpense(dateStr)}
-              onEditTransaction={handleEditTransaction}
-            />
-
-            {/* Savings Target Progress Card (Shown on Home tab if user has configured savings targets) */}
-            {savingsTargets.length > 0 && (
-              <SavingsTargetCard
-                onOpenTargetModal={() => setIsSavingsTargetModalOpen(true)}
-                onOpenSavingsModal={handleOpenSavings}
-              />
-            )}
-
-            {/* Quick Menu Shortcuts Banner */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 shadow-sm backdrop-blur-xl">
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-3">
-                Akses Cepat Fitur Keuangan
-              </h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-                <button
-                  onClick={() => setActiveTab('rekap')}
-                  className="flex items-center justify-between p-3 sm:p-4 rounded-xl bg-purple-50 dark:bg-purple-500/10 border border-purple-500/20 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-500/20 transition-all group"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <BarChart3 className="w-5 h-5 text-purple-500" />
-                    <div className="text-left">
-                      <p className="text-xs font-bold">Rekap Grafik</p>
-                      <p className="text-[10px] text-purple-600/70 dark:text-purple-300/70 hidden sm:block">Grafik & Donat</p>
-                    </div>
-                  </div>
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                </button>
-
-                <button
-                  onClick={() => setActiveTab('history')}
-                  className="flex items-center justify-between p-3 sm:p-4 rounded-xl bg-cyan-50 dark:bg-cyan-500/10 border border-cyan-500/20 text-cyan-700 dark:text-cyan-300 hover:bg-cyan-100 dark:hover:bg-cyan-500/20 transition-all group"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Receipt className="w-5 h-5 text-cyan-500" />
-                    <div className="text-left">
-                      <p className="text-xs font-bold">History Catatan</p>
-                      <p className="text-[10px] text-cyan-600/70 dark:text-cyan-300/70 hidden sm:block">Arus Kas Keuangan</p>
-                    </div>
-                  </div>
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                </button>
-
-                <button
-                  onClick={() => setActiveTab('tabungan')}
-                  className="flex items-center justify-between p-3 sm:p-4 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-all group"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Target className="w-5 h-5 text-emerald-500" />
-                    <div className="text-left">
-                      <p className="text-xs font-bold">Target Tabungan</p>
-                      <p className="text-[10px] text-emerald-600/70 dark:text-emerald-300/70 hidden sm:block">Progres Menabung</p>
-                    </div>
-                  </div>
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                </button>
-
-                <button
-                  onClick={() => setActiveTab('emas')}
-                  className="flex items-center justify-between p-3 sm:p-4 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-all group"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Coins className="w-5 h-5 text-amber-500" />
-                    <div className="text-left">
-                      <p className="text-xs font-bold">Tabungan Emas</p>
-                      <p className="text-[10px] text-amber-600/70 dark:text-amber-300/70 hidden sm:block">Portofolio & ROI</p>
-                    </div>
-                  </div>
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                </button>
-
-                <button
-                  onClick={() => setActiveTab('kalkulator')}
-                  className="col-span-2 md:col-span-1 flex items-center justify-between p-3 sm:p-4 rounded-xl bg-teal-50 dark:bg-teal-500/10 border border-teal-500/20 text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-500/20 transition-all group"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Calculator className="w-5 h-5 text-teal-500" />
-                    <div className="text-left">
-                      <p className="text-xs font-bold">Smart Kalkulator</p>
-                      <p className="text-[10px] text-teal-600/70 dark:text-teal-300/70 hidden sm:block">Darurat, KPR, Edukasi</p>
-                    </div>
-                  </div>
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                </button>
+          isLoading ? (
+            /* BUG-LOADING-0: Tampilkan skeleton loading saat data belum termuat (bukan Rp0 'Belum ada input') */
+            <div className="space-y-5 animate-pulse" aria-label="Memuat data keuangan">
+              <div className="h-44 rounded-3xl bg-white/80 dark:bg-slate-900 border border-finance-200/70 dark:border-slate-800 p-6 flex items-center gap-5">
+                <div className="w-28 h-28 rounded-full bg-cream-200 dark:bg-slate-800 shrink-0" />
+                <div className="flex-1 space-y-3">
+                  <div className="h-5 w-48 rounded-lg bg-cream-200 dark:bg-slate-800" />
+                  <div className="h-4 w-72 rounded-lg bg-cream-200 dark:bg-slate-800" />
+                  <div className="h-12 w-full rounded-2xl bg-cream-200 dark:bg-slate-800" />
+                </div>
+              </div>
+              <div className="h-28 rounded-3xl bg-white/80 dark:bg-slate-900 border border-finance-200/70 dark:border-slate-800" />
+              <div className="h-48 rounded-3xl bg-white/80 dark:bg-slate-900 border border-finance-200/70 dark:border-slate-800" />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="h-28 rounded-2xl bg-white/80 dark:bg-slate-900 border border-finance-200/70 dark:border-slate-800" />
+                <div className="h-28 rounded-2xl bg-white/80 dark:bg-slate-900 border border-finance-200/70 dark:border-slate-800" />
+                <div className="h-28 rounded-2xl bg-white/80 dark:bg-slate-900 border border-finance-200/70 dark:border-slate-800" />
               </div>
             </div>
+          ) : (
+            <div className="space-y-5 sm:space-y-6 animate-in fade-in duration-300">
+              {/* Quick Sticky Catat Cepat Bar (Desktop & Mobile accessible without scrolling far) */}
+              <div className="flex flex-wrap items-center justify-between gap-2.5 p-3 sm:p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-finance-200/80 dark:border-slate-800 shadow-xs">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-600 dark:text-slate-300">
+                  <Zap className="w-4 h-4 text-gold-500" />
+                  <span>Catat Cepat Transaksi Hari Ini</span>
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    onClick={() => handleOpenExpense()}
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Catat Pengeluaran
+                  </button>
+                  <button
+                    onClick={handleOpenIncome}
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-finance-600 hover:bg-finance-700 text-white text-xs font-bold shadow-xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Catat Pemasukan
+                  </button>
+                </div>
+              </div>
+
+              {/* (1) Sapaan + Maskot Finny (Kucing Oren) */}
+              <AnimatedMascot balance={totalBalance} onOpenSettings={() => openProfileSettings('budgeting')} />
+
+              {/* (2) Kartu Verdict Singkat */}
+              <VerdictCard
+                onOpenBudgeting={() => setActiveTab('budgeting')}
+                onOpenSettings={() => openProfileSettings('budgeting')}
+              />
+
+              {/* (3) Kartu Besar Biaya Bulanan + Rincian Kategori */}
+              <MonthlyBudgetHeroCard
+                onOpenBudgeting={() => setActiveTab('budgeting')}
+                onOpenSettings={() => openProfileSettings('budgeting')}
+                onTakeFromSavings={() => setActiveTab('budgeting')}
+              />
+
+              {/* (4) Kartu Ringkasan Jejak Uang */}
+              <MoneyTrailCard />
+
+              {/* (5) Total Saldo, Pemasukan/Pengeluaran Bulan Ini, Sisa Uang Harian */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <StatCard
+                  title="Total Saldo Saat Ini"
+                  amount={totalBalance}
+                  icon={Wallet}
+                  variant={totalBalance >= 0 ? 'emerald' : 'rose'}
+                  subtitle={totalBalance >= 1000000 ? 'Zona Aman' : totalBalance >= 500000 ? 'Zona Waspada' : 'Zona Kritis'}
+                  badge={totalBalance >= 0 ? 'Surplus' : 'Defisit'}
+                  isNegative={totalBalance < 0}
+                />
+                <StatCard
+                  title="Pemasukan Bulan Ini"
+                  amount={thisMonthIncome}
+                  icon={TrendingUp}
+                  variant="emerald"
+                  subtitle={
+                    !hasAnyTransactions
+                      ? 'Belum ada input'
+                      : thisMonthIncome === 0
+                      ? 'Belum ada pemasukan bulan ini'
+                      : `Total Riwayat: ${formatRupiah(totalIncome)}`
+                  }
+                />
+                <StatCard
+                  title="Pengeluaran Bulan Ini"
+                  amount={thisMonthExpense}
+                  icon={TrendingDown}
+                  variant="rose"
+                  subtitle={
+                    !hasAnyTransactions
+                      ? 'Belum ada input'
+                      : thisMonthExpense === 0
+                      ? 'Belum ada pengeluaran bulan ini'
+                      : `Total Riwayat: ${formatRupiah(totalExpense)}`
+                  }
+                />
+                <StatCard
+                  title="Sisa Uang Harian"
+                  amount={dailyAllowance}
+                  icon={Wallet}
+                  variant={dailyAllowance >= 0 ? 'blue' : 'rose'}
+                  subtitle={`Untuk ${remainingDays} hari tersisa bulan ini`}
+                  isNegative={dailyAllowance < 0}
+                />
+              </div>
+
+              {/* Tips & Analisa Otomatis Bulanan */}
+              <SmartTipsCard />
+
+              {/* (6) Kalender Bulanan */}
+              <MonthlyActivityCalendar
+                transactions={transactions}
+                onOpenAddExpense={(dateStr) => handleOpenExpense(dateStr)}
+                onEditTransaction={handleEditTransaction}
+              />
+
+              {/* (7) Akses Cepat Fitur */}
+              <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-slate-900/80 border border-finance-200/80 dark:border-slate-800 shadow-xs">
+                <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-3">
+                  Akses Cepat Menu Keuangan
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+                  {[
+                    { id: 'budgeting' as TabType, label: 'Budgeting', sub: 'Pos & Sisa', icon: PieChart },
+                    { id: 'tabungan' as TabType, label: 'Tabungan', sub: 'Target & Bank', icon: Target },
+                    { id: 'investasi' as TabType, label: 'Investasi', sub: 'Emas & Aset', icon: TrendingUp },
+                    { id: 'utang' as TabType, label: 'Utang Piutang', sub: 'Buku Catatan', icon: HandCoins },
+                    { id: 'rekap' as TabType, label: 'Rekap Grafik', sub: 'Grafik & Donat', icon: BarChart3 },
+                    { id: 'kalkulator' as TabType, label: 'Kalkulator', sub: 'Darurat & KPR', icon: Calculator },
+                  ].map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => setActiveTab(item.id)}
+                        className="flex items-center justify-between p-3 rounded-2xl bg-cream-100/80 dark:bg-slate-950/60 border border-finance-200/60 dark:border-slate-800 text-finance-800 dark:text-slate-200 hover:bg-finance-50 hover:border-finance-400 transition-all group"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Icon className="w-4 h-4 text-finance-600 shrink-0" />
+                          <div className="text-left min-w-0">
+                            <p className="text-xs font-bold truncate">{item.label}</p>
+                            <p className="text-[10px] text-slate-500 truncate hidden sm:block">{item.sub}</p>
+                          </div>
+                        </div>
+                        <ArrowRight className="w-3.5 h-3.5 text-finance-500 group-hover:translate-x-0.5 transition-transform shrink-0" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )
+        )}
+
+        {/* ================= 2. BUDGETING TAB ================= */}
+        {activeTab === 'budgeting' && (
+          <BudgetingPage
+            onOpenBudgetSettings={() => openProfileSettings('budgeting')}
+            onOpenPrintModal={handlePrintReport}
+            onOpenSavingsTab={() => setActiveTab('tabungan')}
+          />
+        )}
+
+        {/* ================= 3. TABUNGAN TAB ================= */}
+        {activeTab === 'tabungan' && (
+          <div className="space-y-6 animate-in fade-in duration-300">
+            <div>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
+                Target & Pos Tabungan Keluarga
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Catat pos tabungan lengkap dengan bank penyimpan, saldo awal opsional, dan progres target
+              </p>
+            </div>
+
+            <SavingsTargetCard
+              showSummaryStats={true}
+              onOpenTargetModal={(initial) => {
+                setSavingsModalInitialData(initial || null);
+                setIsSavingsTargetModalOpen(true);
+              }}
+              onOpenSavingsModal={(targetId, action) => handleOpenSavings(targetId, action)}
+            />
           </div>
         )}
 
-        {/* ================= 2. REKAP TAB (GRAFIK) ================= */}
+        {/* ================= 4. INVESTASI TAB ================= */}
+        {activeTab === 'investasi' && <InvestmentPage />}
+
+        {/* ================= 5. UTANG PIUTANG TAB ================= */}
+        {activeTab === 'utang' && <UtangPiutangPage />}
+
+        {/* ================= 6. REKAP TAB (GRAFIK + TIPS + PDF) ================= */}
         {activeTab === 'rekap' && (
           <div className="space-y-6 animate-in fade-in duration-300">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">Rekap & Analisis Grafik</h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Visualisasi arus kas harian, bulanan & analisis kategori</p>
+                <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
+                  Rekap & Analisis Grafik
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Visualisasi arus kas harian, bulanan, distribusi pengeluaran & tips otomatis
+                </p>
               </div>
+              <button
+                onClick={handlePrintReport}
+                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-finance-600 hover:bg-finance-700 text-white text-xs font-bold shadow-sm self-start sm:self-auto"
+              >
+                <Printer className="w-4 h-4" />
+                Ekspor Laporan Bulanan (PDF)
+              </button>
             </div>
 
-            {/* Visual Charts Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-6">
-              {/* Cashflow & Yearly Chart */}
-              <div className="lg:col-span-2 rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 p-4 sm:p-5 backdrop-blur-xl shadow-sm dark:shadow-xl flex flex-col justify-between transition-colors duration-200">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                      <BarChart3 className="w-4 h-4" />
+            {isLoading ? (
+              <div className="h-72 rounded-3xl bg-white dark:bg-slate-900 border border-finance-200 animate-pulse" />
+            ) : (
+              <>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-6">
+                  <div className="lg:col-span-2 rounded-2xl bg-white dark:bg-slate-900/80 border border-finance-200/80 dark:border-slate-800/80 p-4 sm:p-5 shadow-xs flex flex-col justify-between">
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="p-2 rounded-xl bg-finance-100 text-finance-700">
+                        <BarChart3 className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                          Analisis Arus Kas & Tabungan
+                        </h3>
+                        <span className="text-xs text-slate-500">Grafik perbandingan harian, bulanan & tahunan</span>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">Analisis Arus Kas & Tabungan</h3>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">Grafik perbandingan 1 tahun & tren harian</span>
-                    </div>
+                    <CashflowChart transactions={transactions} />
+                  </div>
+
+                  <div className="rounded-2xl bg-white dark:bg-slate-900/80 border border-finance-200/80 dark:border-slate-800/80 p-4 sm:p-5 shadow-xs">
+                    <CategoryPieChart transactions={transactions} />
                   </div>
                 </div>
-                <CashflowChart transactions={transactions} />
-              </div>
 
-              {/* Category Donut Breakdown Chart */}
-              <div className="rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 p-4 sm:p-5 backdrop-blur-xl shadow-sm dark:shadow-xl transition-colors duration-200">
-                <CategoryPieChart transactions={transactions} />
-              </div>
-            </div>
+                <SmartTipsCard />
+              </>
+            )}
           </div>
         )}
 
-        {/* ================= 3. HISTORY TAB (CATATAN ARUS KAS) ================= */}
+        {/* ================= 7. HISTORY TAB ================= */}
         {activeTab === 'history' && (
           <div className="space-y-6 animate-in fade-in duration-300">
-            <div className="rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 p-4 sm:p-5 backdrop-blur-xl shadow-sm dark:shadow-xl space-y-4 sm:space-y-5 transition-colors duration-200">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
+            <div className="rounded-3xl bg-white dark:bg-slate-900/80 border border-finance-200/80 dark:border-slate-800 p-4 sm:p-5 shadow-sm space-y-4 sm:space-y-5">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-finance-100 dark:border-slate-800">
                 <div className="flex items-center gap-2.5">
-                  <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
+                  <div className="p-2 rounded-xl bg-finance-100 text-finance-700">
                     <ListOrdered className="w-4 h-4" />
                   </div>
                   <div>
-                    <h3 className="text-base font-bold text-slate-900 dark:text-white">History Arus Kas Keuangan</h3>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                      History Arus Kas Keuangan
+                    </h3>
                     <span className="text-xs text-slate-500 dark:text-slate-400">
                       Menampilkan {filteredTransactions.length} dari total {transactions.length} transaksi
                     </span>
                   </div>
                 </div>
 
-                {/* Quick Add Button */}
                 <button
-                  onClick={handleOpenExpense}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-md shadow-rose-950/20 transition-all active:scale-95"
+                  onClick={() => handleOpenExpense()}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-finance-600 hover:bg-finance-700 text-white text-xs font-bold shadow-sm active:scale-95"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   Catat Transaksi Baru
                 </button>
               </div>
 
-              {/* Filter Controls */}
               <TransactionFilter
                 filters={filters}
                 onFilterChange={setFilters}
@@ -539,59 +641,33 @@ export const App: React.FC = () => {
                 onPrintReport={handlePrintReport}
               />
 
-              {/* List of Transactions */}
               <TransactionList
                 transactions={filteredTransactions}
                 openingBalance={openingBalance}
                 onEdit={handleEditTransaction}
                 onDelete={deleteTransaction}
-                onAddNew={handleOpenExpense}
+                onAddNew={() => handleOpenExpense()}
               />
             </div>
           </div>
         )}
 
-        {/* ================= 4. TABUNGAN TAB (TARGET TABUNGAN) ================= */}
-        {activeTab === 'tabungan' && (
-          <div className="space-y-6 animate-in fade-in duration-300">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">Target & Pos Tabungan Keluarga</h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Kelola pos tabungan liburan, pendidikan, dana darurat, dan pensiun</p>
-              </div>
-            </div>
-
-            {/* Savings Target Progress Card */}
-            <SavingsTargetCard
-              onOpenTargetModal={() => setIsSavingsTargetModalOpen(true)}
-              onOpenSavingsModal={handleOpenSavings}
-            />
-          </div>
-        )}
-
-        {/* ================= 5. KALKULATOR TAB (SMART CALCULATORS) ================= */}
+        {/* ================= 8. KALKULATOR TAB ================= */}
         {activeTab === 'kalkulator' && (
           <SmartCalculators onCreateSavingsTarget={handleCreateSavingsTargetFromCalc} />
         )}
-
-        {/* ================= 6. TABUNGAN EMAS TAB (WEALTH TRACKER) ================= */}
-        {activeTab === 'emas' && (
-          <GoldPortfolioDashboard />
-        )}
-
       </main>
 
-      {/* Floating Bottom Navigation Bar (Mobile View) */}
       <MobileBottomNav
         activeTab={activeTab}
         onSelectTab={setActiveTab}
-        onOpenExpenseModal={handleOpenExpense}
+        onOpenExpenseModal={() => handleOpenExpense()}
         onOpenIncomeModal={handleOpenIncome}
-        onOpenSavingsModal={handleOpenSavings}
+        onOpenSavingsModal={() => handleOpenSavings()}
         onOpenCategoryManager={() => setIsCategoryModalOpen(true)}
+        onOpenProfileSettings={() => openProfileSettings('profile')}
       />
 
-      {/* Footer */}
       <Footer />
 
       {/* Modals */}
@@ -600,11 +676,15 @@ export const App: React.FC = () => {
         onClose={() => {
           setIsTransactionModalOpen(false);
           setTransactionModalDate(undefined);
+          setTxModalSavingsTargetId(undefined);
+          setTxModalSavingsAction(undefined);
         }}
         initialType={transactionModalType}
         editingTransaction={editingTransaction}
         onOpenCategoryManager={() => setIsCategoryModalOpen(true)}
         initialDate={transactionModalDate}
+        initialSavingsTargetId={txModalSavingsTargetId}
+        initialSavingsAction={txModalSavingsAction}
       />
 
       <CategoryManagerModal
@@ -634,6 +714,7 @@ export const App: React.FC = () => {
       <ProfileSettingsModal
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}
+        initialTab={profileInitialTab}
       />
 
       <FeedbackModal

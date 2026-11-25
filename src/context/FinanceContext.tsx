@@ -1,12 +1,45 @@
 import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { Category, Transaction, TransactionType, YearlyCashflowSummary, MonthlyCashflowItem, BalanceThresholds, SavingsTargetItem, SavingsActionType, CurrencyCode, GoldTransaction, GoldPortfolio, GoldPrices, GoldBrand } from '../types';
+import {
+  Category,
+  Transaction,
+  TransactionType,
+  YearlyCashflowSummary,
+  MonthlyCashflowItem,
+  BalanceThresholds,
+  SavingsTargetItem,
+  SavingsActionType,
+  CurrencyCode,
+  GoldTransaction,
+  GoldPortfolio,
+  GoldPrices,
+  GoldBrand,
+  MonthlyBudgetConfig,
+  BudgetPost,
+  MonthPostSettlement,
+  RemainderActionType,
+  PosTransferPayload,
+  SplitSavingsAllocation,
+  DebtItem,
+  ManualInvestment,
+  ClassInvestment,
+  EmergencyFundPreference,
+  FinancialVerdict,
+} from '../types';
 import { INITIAL_CATEGORIES, getInitialDemoTransactions, DEFAULT_INCOME_CATEGORIES, DEFAULT_EXPENSE_CATEGORIES, getInitialDemoGoldTransactions } from '../lib/defaultData';
 import { getAppCurrency, setAppCurrency as setGlobalAppCurrency } from '../lib/formatters';
-import { isSavingsTransaction, calculateSavingsProgress } from '../lib/savingsUtils';
+import { isSavingsTransaction, calculateSavingsProgress, buildTransferMetaTag, parseTransferMeta } from '../lib/savingsUtils';
 import { fetchLiveGoldPrices, calculateGoldPortfolio, saveStoredManualPrices, clearStoredManualPrices, DEFAULT_GOLD_PRICES, isGoldPriceStale } from '../lib/goldPriceService';
 import { getStoredAgentApiKey } from '../lib/agentApiKey';
+import {
+  calculateMonthlyBudgetStatus,
+  computeMonthlyVerdict,
+  generateMonthlyInsights,
+  getCurrentMonthKey,
+  MonthlyBudgetStatus,
+  MonthlyInsightTip,
+} from '../lib/budgetUtils';
 
 const currentYearNow = new Date().getFullYear();
 
@@ -90,6 +123,44 @@ interface FinanceContextType {
   updateSavingsTargetItem: (id: string, partial: Partial<SavingsTargetItem>) => Promise<{ error: string | null }>;
   deleteSavingsTargetItem: (id: string) => Promise<{ error: string | null }>;
   recordSavingsTransaction: (targetId: string, amount: number, action: SavingsActionType, date: string, notes?: string) => Promise<{ error: string | null }>;
+  recordSplitSavingsDeposit: (allocations: SplitSavingsAllocation[], date: string, notes?: string, fromNode?: PosTransferPayload['from']) => Promise<{ error: string | null }>;
+  recordTransfer: (payload: PosTransferPayload) => Promise<{ error: string | null }>;
+  // Budgeting & Remainder Settlement
+  budgetConfigs: MonthlyBudgetConfig[];
+  postSettlements: MonthPostSettlement[];
+  currentMonthBudgetStatus: MonthlyBudgetStatus;
+  currentMonthVerdict: FinancialVerdict;
+  currentMonthInsights: MonthlyInsightTip[];
+  getBudgetStatusForMonth: (monthKey: string) => MonthlyBudgetStatus;
+  getVerdictForMonth: (monthKey: string) => FinancialVerdict;
+  getInsightsForMonth: (monthKey: string) => MonthlyInsightTip[];
+  saveBudgetConfigForward: (monthlyIncome: number, posts: BudgetPost[]) => Promise<{ error: string | null }>;
+  settleMonthPostRemainder: (params: {
+    monthKey: string;
+    postId: string;
+    postName: string;
+    amount: number;
+    action: RemainderActionType;
+    targetSavingsId?: string;
+  }) => Promise<{ error: string | null }>;
+  // Utang Piutang CRUD
+  debts: DebtItem[];
+  addDebt: (item: Omit<DebtItem, 'id' | 'user_id' | 'created_at'>) => Promise<{ error: string | null }>;
+  updateDebt: (id: string, partial: Partial<DebtItem>) => Promise<{ error: string | null }>;
+  deleteDebt: (id: string) => Promise<{ error: string | null }>;
+  toggleDebtStatus: (id: string) => Promise<{ error: string | null }>;
+  // Manual & Class Investments CRUD
+  manualInvestments: ManualInvestment[];
+  addManualInvestment: (item: Omit<ManualInvestment, 'id' | 'user_id' | 'created_at'>) => Promise<{ error: string | null }>;
+  updateManualInvestment: (id: string, partial: Partial<ManualInvestment>) => Promise<{ error: string | null }>;
+  deleteManualInvestment: (id: string) => Promise<{ error: string | null }>;
+  classInvestments: ClassInvestment[];
+  addClassInvestment: (item: Omit<ClassInvestment, 'id' | 'user_id' | 'created_at'>) => Promise<{ error: string | null }>;
+  updateClassInvestment: (id: string, partial: Partial<ClassInvestment>) => Promise<{ error: string | null }>;
+  deleteClassInvestment: (id: string) => Promise<{ error: string | null }>;
+  // Emergency Fund Preference (Calculator <-> Tabungan sync)
+  emergencyFundPref: EmergencyFundPreference | null;
+  updateEmergencyFundPref: (pref: Omit<EmergencyFundPreference, 'updatedAt'>) => void;
   // Gold Investment & Portfolio CRUD
   goldTransactions: GoldTransaction[];
   goldPortfolio: GoldPortfolio;
@@ -131,6 +202,14 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [goldPrices, setGoldPrices] = useState<GoldPrices>(DEFAULT_GOLD_PRICES);
   const [isGoldPricesLoading, setIsGoldPricesLoading] = useState<boolean>(false);
 
+  // Budgeting, Settlements, Debts, Manual & Class Investments, Emergency Fund Preference
+  const [budgetConfigs, setBudgetConfigs] = useState<MonthlyBudgetConfig[]>([]);
+  const [postSettlements, setPostSettlements] = useState<MonthPostSettlement[]>([]);
+  const [debts, setDebts] = useState<DebtItem[]>([]);
+  const [manualInvestments, setManualInvestments] = useState<ManualInvestment[]>([]);
+  const [classInvestments, setClassInvestments] = useState<ClassInvestment[]>([]);
+  const [emergencyFundPref, setEmergencyFundPref] = useState<EmergencyFundPreference | null>(null);
+
   // Compute portfolio metrics using Average Cost Method
   const goldPortfolio = useMemo(() => {
     return calculateGoldPortfolio(goldTransactions);
@@ -155,6 +234,40 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const getStorageKey = useCallback((prefix: string) => {
     return `ft_${prefix}_${user?.id || 'default'}`;
   }, [user?.id]);
+
+  const loadLocalModuleStates = useCallback((userId: string) => {
+    const readJson = <T,>(prefix: string, fallback: T): T => {
+      try {
+        const raw = localStorage.getItem(`ft_${prefix}_${userId}`);
+        return raw ? (JSON.parse(raw) as T) : fallback;
+      } catch {
+        return fallback;
+      }
+    };
+
+    setBudgetConfigs(readJson<MonthlyBudgetConfig[]>('budget_configs', []));
+    setPostSettlements(readJson<MonthPostSettlement[]>('post_settlements', []));
+    setDebts(readJson<DebtItem[]>('debts', []));
+    setManualInvestments(readJson<ManualInvestment[]>('manual_investments', []));
+    setClassInvestments(readJson<ClassInvestment[]>('class_investments', []));
+    setEmergencyFundPref(readJson<EmergencyFundPreference | null>('emergency_fund_pref', null));
+
+    const goldKey = `ft_gold_transactions_${userId}`;
+    const savedGoldStr = localStorage.getItem(goldKey);
+    if (savedGoldStr) {
+      try {
+        setGoldTransactions(JSON.parse(savedGoldStr));
+      } catch {
+        setGoldTransactions([]);
+      }
+    } else if (isGuest) {
+      const initialGold = getInitialDemoGoldTransactions(userId);
+      setGoldTransactions(initialGold);
+      localStorage.setItem(goldKey, JSON.stringify(initialGold));
+    } else {
+      setGoldTransactions([]);
+    }
+  }, [isGuest]);
 
   const loadData = useCallback(async () => {
     if (!user) {
@@ -258,6 +371,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           localStorage.setItem(getStorageKey('savings_target_items'), JSON.stringify([]));
         }
 
+        // 5. Load Gold, Budgeting, Debts, Manual & Class Investments (local per user)
+        loadLocalModuleStates(user.id);
+
       } catch (err) {
         console.error('Error loading Supabase data:', err);
       } finally {
@@ -339,24 +455,12 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         localStorage.setItem(savingsItemsKey, JSON.stringify([]));
       }
 
-      // Gold Transactions (stored locally per user)
-      const goldKey = getStorageKey('gold_transactions');
-      const savedGoldStr = localStorage.getItem(goldKey);
-      if (savedGoldStr) {
-        try {
-          setGoldTransactions(JSON.parse(savedGoldStr));
-        } catch {
-          setGoldTransactions([]);
-        }
-      } else {
-        const initialGold = getInitialDemoGoldTransactions(user.id);
-        setGoldTransactions(initialGold);
-        localStorage.setItem(goldKey, JSON.stringify(initialGold));
-      }
+      // Gold & Additional Modules (stored locally per user)
+      loadLocalModuleStates(user.id);
 
       setIsLoading(false);
     }
-  }, [user, isGuest, configured, getStorageKey]);
+  }, [user, isGuest, configured, getStorageKey, loadLocalModuleStates]);
 
   useEffect(() => {
     loadData();
@@ -525,11 +629,13 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const addSavingsTargetItem = async (item: Omit<SavingsTargetItem, 'id' | 'user_id'>) => {
     if (!user) return { error: 'Pengguna belum login' };
 
+    const initBal = Number(item.initial_balance) || 0;
     const newItem: SavingsTargetItem = {
       ...item,
       id: 'sav-' + Date.now(),
       user_id: user.id,
-      current_amount: item.current_amount || 0,
+      initial_balance: initBal,
+      current_amount: item.current_amount !== undefined ? Number(item.current_amount) : initBal,
       created_at: new Date().toISOString(),
     };
 
@@ -541,7 +647,23 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const updateSavingsTargetItem = async (id: string, partial: Partial<SavingsTargetItem>) => {
     if (!user) return { error: 'Pengguna belum login' };
 
-    const updated = savingsTargets.map(t => (t.id === id ? { ...t, ...partial } : t));
+    const updated = savingsTargets.map(t => {
+      if (t.id !== id) return t;
+      // When initial_balance is updated later, adjust current_amount by the delta
+      // so saldo pos = saldo awal + setor - tarik without altering old transactions
+      if (partial.initial_balance !== undefined && partial.current_amount === undefined) {
+        const oldInit = Number(t.initial_balance) || 0;
+        const newInit = Math.max(0, Number(partial.initial_balance) || 0);
+        const netMoves = Math.max(0, (Number(t.current_amount) || 0) - oldInit);
+        return {
+          ...t,
+          ...partial,
+          initial_balance: newInit,
+          current_amount: newInit + netMoves,
+        };
+      }
+      return { ...t, ...partial };
+    });
     saveSavingsTargetsState(updated);
     return { error: null };
   };
@@ -554,7 +676,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return { error: null };
   };
 
-  // RECORD DEPOSIT OR WITHDRAWAL TO SPECIFIC SAVINGS TARGET
+  // RECORD DEPOSIT OR WITHDRAWAL TO SPECIFIC SAVINGS TARGET (Single-Path Transfer Kas)
   const recordSavingsTransaction = async (
     targetId: string,
     amount: number,
@@ -568,43 +690,29 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const targetItem = savingsTargets.find(t => t.id === targetId);
     if (!targetItem) return { error: 'Target tabungan tidak ditemukan' };
 
-    // Update saved amount for target
     const currentVal = targetItem.current_amount || 0;
+    if (action === 'withdraw' && amount > currentVal) {
+      return { error: `Saldo pos "${targetItem.name}" tidak mencukupi (tersedia ${currentVal.toLocaleString('id-ID')})` };
+    }
+
     const newVal = action === 'deposit' ? currentVal + amount : Math.max(0, currentVal - amount);
     await updateSavingsTargetItem(targetId, { current_amount: newVal });
 
-    // Transaction direction:
-    // Setor ke Tabungan => Pengeluaran (expense) dari dompet utama ke Tabungan (target savings balance increases)
-    // Tarik Tabungan => Pemasukan (income) ke dompet utama dari Tabungan (target savings balance decreases)
     const txType: TransactionType = action === 'deposit' ? 'expense' : 'income';
-
-    let savingsCategory = categories.find(c => c.type === txType && c.name.toLowerCase().includes('tabungan'));
-    if (!savingsCategory) {
-      savingsCategory = categories.find(c => c.name.toLowerCase().includes('tabungan'));
-    }
-
-    let categoryIdToUse = savingsCategory?.id || '';
-
-    // If still no category ID found, auto add Tabungan category for txType
-    if (!categoryIdToUse) {
-      await addCategory({
-        name: 'Tabungan',
-        type: txType,
-        icon: 'PiggyBank',
-        color: '#06B6D4',
-        is_default: true,
-      });
-      const newlyCreated = categories.find(c => c.type === txType && c.name.toLowerCase().includes('tabungan'));
-      if (newlyCreated) {
-        categoryIdToUse = newlyCreated.id;
-      }
-    }
+    const metaTag = buildTransferMetaTag({
+      fromType: action === 'deposit' ? 'main_wallet' : 'savings_target',
+      fromId: action === 'deposit' ? 'main_wallet' : targetItem.id,
+      fromLabel: action === 'deposit' ? 'Dompet Utama' : targetItem.name,
+      toType: action === 'deposit' ? 'savings_target' : 'main_wallet',
+      toId: action === 'deposit' ? targetItem.id : 'main_wallet',
+      toLabel: action === 'deposit' ? targetItem.name : 'Dompet Utama',
+    });
 
     const actionText = action === 'deposit' ? 'Setor Ke Tabungan' : 'Tarik Dari Tabungan';
-    const txNotes = `[${actionText}: ${targetItem.name}] (sav_target:${targetItem.id}) ${notes || ''}`.trim();
+    const txNotes = `[${actionText}: ${targetItem.name}] (sav_target:${targetItem.id}) ${metaTag} ${notes || ''}`.trim();
 
     await addTransaction({
-      category_id: categoryIdToUse || (txType === 'income' ? 'cat-inc-sav' : 'cat-exp-sav'),
+      category_id: '',
       type: txType,
       amount,
       date: date || new Date().toISOString().split('T')[0],
@@ -616,6 +724,292 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     return { error: null };
   };
+
+  // GENERAL POS-TO-POS TRANSFER ("Transfer Kas": Dompet Utama, Pos Budgeting, Pos Tabungan)
+  const recordTransfer = async (payload: PosTransferPayload): Promise<{ error: string | null }> => {
+    if (!user) return { error: 'Pengguna belum login' };
+    const { from, to, amount, date, notes } = payload;
+    if (amount <= 0) return { error: 'Nominal transfer harus lebih dari Rp 0' };
+    if (from.type === to.type && from.id === to.id) {
+      return { error: 'Pos asal dan pos tujuan tidak boleh sama' };
+    }
+
+    // Validate & update savings target balances
+    let updatedTargets = [...savingsTargets];
+    if (from.type === 'savings_target') {
+      const fromTarget = updatedTargets.find(t => t.id === from.id);
+      if (!fromTarget) return { error: 'Pos tabungan asal tidak ditemukan' };
+      if ((fromTarget.current_amount || 0) < amount) {
+        return { error: `Saldo pos tabungan "${fromTarget.name}" tidak mencukupi` };
+      }
+      updatedTargets = updatedTargets.map(t =>
+        t.id === from.id ? { ...t, current_amount: Math.max(0, (t.current_amount || 0) - amount) } : t
+      );
+    }
+    if (to.type === 'savings_target') {
+      const toTarget = updatedTargets.find(t => t.id === to.id);
+      if (!toTarget) return { error: 'Pos tabungan tujuan tidak ditemukan' };
+      updatedTargets = updatedTargets.map(t =>
+        t.id === to.id ? { ...t, current_amount: (t.current_amount || 0) + amount } : t
+      );
+    }
+
+    if (from.type === 'savings_target' || to.type === 'savings_target') {
+      saveSavingsTargetsState(updatedTargets);
+    }
+
+    // Determine cash wallet impact direction for legacy compatibility
+    // Deposit into savings = expense from cash wallet; Withdraw from savings = income to cash wallet
+    let txType: TransactionType = 'expense';
+    let savingsAction: SavingsActionType | undefined;
+    let savingsTargetId: string | undefined;
+    if (to.type === 'savings_target' && from.type !== 'savings_target') {
+      txType = 'expense';
+      savingsAction = 'deposit';
+      savingsTargetId = to.id;
+    } else if (from.type === 'savings_target' && to.type !== 'savings_target') {
+      txType = 'income';
+      savingsAction = 'withdraw';
+      savingsTargetId = from.id;
+    }
+
+    const metaTag = buildTransferMetaTag({
+      fromType: from.type,
+      fromId: from.id,
+      fromLabel: from.label,
+      toType: to.type,
+      toId: to.id,
+      toLabel: to.label,
+    });
+    const savTag = savingsTargetId ? `(sav_target:${savingsTargetId})` : '';
+    const txNotes = `[Transfer Kas: ${from.label} → ${to.label}] ${savTag} ${metaTag} ${notes || ''}`.replace(/\s+/g, ' ').trim();
+
+    await addTransaction({
+      category_id: '',
+      type: txType,
+      amount,
+      date: date || new Date().toISOString().split('T')[0],
+      notes: txNotes,
+      is_savings_transfer: true,
+      savings_target_id: savingsTargetId,
+      savings_action: savingsAction,
+    });
+
+    return { error: null };
+  };
+
+  // SPLIT DEPOSIT ACROSS MULTIPLE SAVINGS TARGETS IN ONE RECORDING
+  const recordSplitSavingsDeposit = async (
+    allocations: SplitSavingsAllocation[],
+    date: string,
+    notes?: string,
+    fromNode: PosTransferPayload['from'] = { type: 'main_wallet', id: 'main_wallet', label: 'Dompet Utama' }
+  ): Promise<{ error: string | null }> => {
+    if (!user) return { error: 'Pengguna belum login' };
+    const valid = allocations.filter(a => a.amount > 0);
+    if (valid.length === 0) return { error: 'Isi minimal satu nominal target tabungan' };
+
+    for (const alloc of valid) {
+      const target = savingsTargets.find(t => t.id === alloc.targetId);
+      if (!target) continue;
+      await recordTransfer({
+        from: fromNode,
+        to: { type: 'savings_target', id: target.id, label: target.name },
+        amount: alloc.amount,
+        date,
+        notes,
+      });
+    }
+    return { error: null };
+  };
+
+  // BUDGETING (Forward-only: applies to current & future months only)
+  const saveBudgetConfigForward = async (
+    monthlyIncome: number,
+    posts: BudgetPost[]
+  ): Promise<{ error: string | null }> => {
+    if (!user) return { error: 'Pengguna belum login' };
+    if (monthlyIncome <= 0) return { error: 'Total pemasukan bulanan harus lebih dari Rp 0' };
+    if (posts.length === 0) return { error: 'Minimal buat satu pos budgeting' };
+
+    const currentMonthKey = getCurrentMonthKey();
+    const newConfig: MonthlyBudgetConfig = {
+      effectiveFrom: currentMonthKey,
+      monthlyIncome,
+      posts,
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Replace config for currentMonthKey if already exists, keeping all prior months (< currentMonthKey) intact!
+    const filtered = budgetConfigs.filter(c => c.effectiveFrom !== currentMonthKey);
+    const updated = [...filtered, newConfig].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
+    setBudgetConfigs(updated);
+    localStorage.setItem(getStorageKey('budget_configs'), JSON.stringify(updated));
+    return { error: null };
+  };
+
+  const settleMonthPostRemainder = async ({
+    monthKey,
+    postId,
+    postName,
+    amount,
+    action,
+    targetSavingsId,
+  }: {
+    monthKey: string;
+    postId: string;
+    postName: string;
+    amount: number;
+    action: RemainderActionType;
+    targetSavingsId?: string;
+  }): Promise<{ error: string | null }> => {
+    if (!user) return { error: 'Pengguna belum login' };
+    if (amount <= 0) return { error: 'Tidak ada sisa anggaran untuk diproses' };
+
+    let targetSavingsName: string | undefined;
+    if (action === 'to_savings') {
+      const target = savingsTargets.find(t => t.id === targetSavingsId);
+      if (!target) return { error: 'Pilih pos tabungan tujuan terlebih dahulu' };
+      targetSavingsName = target.name;
+      const todayStr = new Date().toISOString().split('T')[0];
+      const res = await recordTransfer({
+        from: { type: 'budget_post', id: postId, label: postName },
+        to: { type: 'savings_target', id: target.id, label: target.name },
+        amount,
+        date: todayStr,
+        notes: `Sisa akhir bulan ${monthKey} dari ${postName}`,
+      });
+      if (res.error) return res;
+    }
+
+    const newSettlement: MonthPostSettlement = {
+      monthKey,
+      postId,
+      postName,
+      amount,
+      action,
+      targetSavingsId,
+      targetSavingsName,
+      settledAt: new Date().toISOString(),
+    };
+
+    const updated = [
+      ...postSettlements.filter(s => !(s.monthKey === monthKey && s.postId === postId)),
+      newSettlement,
+    ];
+    setPostSettlements(updated);
+    localStorage.setItem(getStorageKey('post_settlements'), JSON.stringify(updated));
+    return { error: null };
+  };
+
+  // UTANG PIUTANG CRUD
+  const saveDebtsState = useCallback((items: DebtItem[]) => {
+    setDebts(items);
+    localStorage.setItem(getStorageKey('debts'), JSON.stringify(items));
+  }, [getStorageKey]);
+
+  const addDebt = async (item: Omit<DebtItem, 'id' | 'user_id' | 'created_at'>) => {
+    if (!user) return { error: 'Pengguna belum login' };
+    const newItem: DebtItem = {
+      ...item,
+      id: 'debt-' + Date.now(),
+      user_id: user.id,
+      created_at: new Date().toISOString(),
+    };
+    saveDebtsState([newItem, ...debts]);
+    return { error: null };
+  };
+
+  const updateDebt = async (id: string, partial: Partial<DebtItem>) => {
+    if (!user) return { error: 'Pengguna belum login' };
+    saveDebtsState(debts.map(d => (d.id === id ? { ...d, ...partial } : d)));
+    return { error: null };
+  };
+
+  const deleteDebt = async (id: string) => {
+    if (!user) return { error: 'Pengguna belum login' };
+    saveDebtsState(debts.filter(d => d.id !== id));
+    return { error: null };
+  };
+
+  const toggleDebtStatus = async (id: string) => {
+    if (!user) return { error: 'Pengguna belum login' };
+    const target = debts.find(d => d.id === id);
+    if (!target) return { error: 'Catatan tidak ditemukan' };
+    const nextStatus = target.status === 'lunas' ? 'belum_lunas' : 'lunas';
+    return updateDebt(id, {
+      status: nextStatus,
+      paid_at: nextStatus === 'lunas' ? new Date().toISOString().split('T')[0] : undefined,
+    });
+  };
+
+  // MANUAL INVESTMENTS CRUD
+  const saveManualInvestmentsState = useCallback((items: ManualInvestment[]) => {
+    setManualInvestments(items);
+    localStorage.setItem(getStorageKey('manual_investments'), JSON.stringify(items));
+  }, [getStorageKey]);
+
+  const addManualInvestment = async (item: Omit<ManualInvestment, 'id' | 'user_id' | 'created_at'>) => {
+    if (!user) return { error: 'Pengguna belum login' };
+    const newItem: ManualInvestment = {
+      ...item,
+      id: 'minv-' + Date.now(),
+      user_id: user.id,
+      created_at: new Date().toISOString(),
+    };
+    saveManualInvestmentsState([newItem, ...manualInvestments]);
+    return { error: null };
+  };
+
+  const updateManualInvestment = async (id: string, partial: Partial<ManualInvestment>) => {
+    if (!user) return { error: 'Pengguna belum login' };
+    saveManualInvestmentsState(
+      manualInvestments.map(m => (m.id === id ? { ...m, ...partial, updated_at: new Date().toISOString() } : m))
+    );
+    return { error: null };
+  };
+
+  const deleteManualInvestment = async (id: string) => {
+    if (!user) return { error: 'Pengguna belum login' };
+    saveManualInvestmentsState(manualInvestments.filter(m => m.id !== id));
+    return { error: null };
+  };
+
+  // CLASS INVESTMENTS CRUD (Investasi Leher ke Atas)
+  const saveClassInvestmentsState = useCallback((items: ClassInvestment[]) => {
+    setClassInvestments(items);
+    localStorage.setItem(getStorageKey('class_investments'), JSON.stringify(items));
+  }, [getStorageKey]);
+
+  const addClassInvestment = async (item: Omit<ClassInvestment, 'id' | 'user_id' | 'created_at'>) => {
+    if (!user) return { error: 'Pengguna belum login' };
+    const newItem: ClassInvestment = {
+      ...item,
+      id: 'cls-' + Date.now(),
+      user_id: user.id,
+      created_at: new Date().toISOString(),
+    };
+    saveClassInvestmentsState([newItem, ...classInvestments]);
+    return { error: null };
+  };
+
+  const updateClassInvestment = async (id: string, partial: Partial<ClassInvestment>) => {
+    if (!user) return { error: 'Pengguna belum login' };
+    saveClassInvestmentsState(classInvestments.map(c => (c.id === id ? { ...c, ...partial } : c)));
+    return { error: null };
+  };
+
+  const deleteClassInvestment = async (id: string) => {
+    if (!user) return { error: 'Pengguna belum login' };
+    saveClassInvestmentsState(classInvestments.filter(c => c.id !== id));
+    return { error: null };
+  };
+
+  const updateEmergencyFundPref = useCallback((pref: Omit<EmergencyFundPreference, 'updatedAt'>) => {
+    const full: EmergencyFundPreference = { ...pref, updatedAt: new Date().toISOString() };
+    setEmergencyFundPref(full);
+    localStorage.setItem(getStorageKey('emergency_fund_pref'), JSON.stringify(full));
+  }, [getStorageKey]);
 
   // GLOBAL SAVINGS TARGET UPDATE
   const updateSavingsTarget = async (newTarget: number): Promise<{ error: string | null }> => {
@@ -711,7 +1105,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const addTransaction = async (tx: Omit<Transaction, 'id' | 'user_id' | 'created_at'>) => {
     if (!user) return { error: 'Pengguna belum login' };
 
-    const selectedCategory = categories.find(c => c.id === tx.category_id);
+    const selectedCategory = tx.category_id ? categories.find(c => c.id === tx.category_id) : undefined;
+    const isTransfer = tx.is_savings_transfer ?? isSavingsTransaction(tx as any);
 
     if (configured && supabase && !isGuest) {
       try {
@@ -720,7 +1115,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           .insert([
             {
               user_id: user.id,
-              category_id: tx.category_id,
+              category_id: isTransfer || !tx.category_id ? null : tx.category_id,
               type: tx.type,
               amount: tx.amount,
               date: tx.date,
@@ -735,15 +1130,15 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           const newTx: Transaction = {
             id: data.id,
             user_id: data.user_id,
-            category_id: data.category_id,
-            category_name: data.categories?.name || selectedCategory?.name || 'Tabungan',
-            category_icon: data.categories?.icon || selectedCategory?.icon || 'PiggyBank',
-            category_color: data.categories?.color || selectedCategory?.color || '#06B6D4',
+            category_id: data.category_id || '',
+            category_name: isTransfer ? 'Transfer Kas' : (data.categories?.name || selectedCategory?.name || 'Lainnya'),
+            category_icon: isTransfer ? 'ArrowLeftRight' : (data.categories?.icon || selectedCategory?.icon || 'Wallet'),
+            category_color: isTransfer ? '#0d9488' : (data.categories?.color || selectedCategory?.color || '#64748B'),
             type: data.type as TransactionType,
             amount: Number(data.amount),
             date: data.date,
             notes: data.notes || '',
-            is_savings_transfer: tx.is_savings_transfer ?? isSavingsTransaction({ ...data, notes: data.notes || tx.notes }),
+            is_savings_transfer: isTransfer,
             savings_target_id: tx.savings_target_id,
             savings_action: tx.savings_action,
             created_at: data.created_at,
@@ -757,12 +1152,12 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } else {
       const newTx: Transaction = {
         ...tx,
-        id: 'tx-' + Date.now(),
+        id: 'tx-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
         user_id: user.id,
-        category_name: selectedCategory?.name || 'Tabungan',
-        category_icon: selectedCategory?.icon || 'PiggyBank',
-        category_color: selectedCategory?.color || '#06B6D4',
-        is_savings_transfer: tx.is_savings_transfer ?? isSavingsTransaction(tx as any),
+        category_name: isTransfer ? 'Transfer Kas' : (selectedCategory?.name || 'Lainnya'),
+        category_icon: isTransfer ? 'ArrowLeftRight' : (selectedCategory?.icon || 'Wallet'),
+        category_color: isTransfer ? '#0d9488' : (selectedCategory?.color || '#64748B'),
+        is_savings_transfer: isTransfer,
         savings_target_id: tx.savings_target_id,
         savings_action: tx.savings_action,
         created_at: new Date().toISOString(),
@@ -872,29 +1267,46 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     }
 
-    // Reverse savings target amount if this was a savings transaction
+    // Reverse savings target amount if this was a savings / transfer transaction
     if (targetTx && targetTx.notes) {
-      let matchedTarget = savingsTargets.find(s => targetTx.notes?.includes(`sav_target:${s.id}`));
-      if (!matchedTarget) {
-        matchedTarget = savingsTargets.find(s => targetTx.notes?.includes(s.name));
-      }
-
-      if (matchedTarget) {
-        const currentVal = matchedTarget.current_amount || 0;
-        const txAmount = Number(targetTx.amount) || 0;
-        const isDeposit = targetTx.notes.includes('Setor') || targetTx.type === 'expense';
-
-        let newVal = currentVal;
-        if (targetTx.notes.includes('Setor') || (isDeposit && !targetTx.notes.includes('Tarik'))) {
-          // Reversing a deposit: subtract amount from target balance
-          newVal = Math.max(0, currentVal - txAmount);
-        } else if (targetTx.notes.includes('Tarik')) {
-          // Reversing a withdrawal: add amount back to target balance
-          newVal = currentVal + txAmount;
+      const meta = parseTransferMeta(targetTx.notes);
+      const txAmount = Number(targetTx.amount) || 0;
+      if (meta) {
+        let nextTargets = [...savingsTargets];
+        let changed = false;
+        if (meta.fromType === 'savings_target') {
+          nextTargets = nextTargets.map(s =>
+            s.id === meta.fromId ? { ...s, current_amount: (s.current_amount || 0) + txAmount } : s
+          );
+          changed = true;
+        }
+        if (meta.toType === 'savings_target') {
+          nextTargets = nextTargets.map(s =>
+            s.id === meta.toId ? { ...s, current_amount: Math.max(0, (s.current_amount || 0) - txAmount) } : s
+          );
+          changed = true;
+        }
+        if (changed) saveSavingsTargetsState(nextTargets);
+      } else {
+        let matchedTarget = savingsTargets.find(s => targetTx.notes?.includes(`sav_target:${s.id}`));
+        if (!matchedTarget) {
+          matchedTarget = savingsTargets.find(s => targetTx.notes?.includes(s.name));
         }
 
-        if (newVal !== currentVal) {
-          await updateSavingsTargetItem(matchedTarget.id, { current_amount: newVal });
+        if (matchedTarget) {
+          const currentVal = matchedTarget.current_amount || 0;
+          const isDeposit = targetTx.notes.includes('Setor') || targetTx.type === 'expense';
+
+          let newVal = currentVal;
+          if (targetTx.notes.includes('Setor') || (isDeposit && !targetTx.notes.includes('Tarik'))) {
+            newVal = Math.max(0, currentVal - txAmount);
+          } else if (targetTx.notes.includes('Tarik')) {
+            newVal = currentVal + txAmount;
+          }
+
+          if (newVal !== currentVal) {
+            await updateSavingsTargetItem(matchedTarget.id, { current_amount: newVal });
+          }
         }
       }
     }
@@ -1163,6 +1575,63 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     [transactions, monthlySavingsTarget]
   );
 
+  // Budgeting, Verdict, & Insights computations
+  const getBudgetStatusForMonth = useCallback(
+    (monthKey: string): MonthlyBudgetStatus => {
+      return calculateMonthlyBudgetStatus({
+        monthKey,
+        configs: budgetConfigs,
+        settlements: postSettlements,
+        transactions,
+        goldTransactions,
+        manualInvestments,
+      });
+    },
+    [budgetConfigs, postSettlements, transactions, goldTransactions, manualInvestments]
+  );
+
+  const getVerdictForMonth = useCallback(
+    (monthKey: string): FinancialVerdict => {
+      const status = getBudgetStatusForMonth(monthKey);
+      return computeMonthlyVerdict({
+        monthKey,
+        budgetStatus: status,
+        transactions,
+        monthlySavingsTarget,
+        savingsTargets,
+      });
+    },
+    [getBudgetStatusForMonth, transactions, monthlySavingsTarget, savingsTargets]
+  );
+
+  const getInsightsForMonth = useCallback(
+    (monthKey: string): MonthlyInsightTip[] => {
+      const status = getBudgetStatusForMonth(monthKey);
+      const verdict = getVerdictForMonth(monthKey);
+      return generateMonthlyInsights({
+        monthKey,
+        budgetStatus: status,
+        verdict,
+        transactions,
+      });
+    },
+    [getBudgetStatusForMonth, getVerdictForMonth, transactions]
+  );
+
+  const currentMonthKey = getCurrentMonthKey();
+  const currentMonthBudgetStatus = useMemo(
+    () => getBudgetStatusForMonth(currentMonthKey),
+    [getBudgetStatusForMonth, currentMonthKey]
+  );
+  const currentMonthVerdict = useMemo(
+    () => getVerdictForMonth(currentMonthKey),
+    [getVerdictForMonth, currentMonthKey]
+  );
+  const currentMonthInsights = useMemo(
+    () => getInsightsForMonth(currentMonthKey),
+    [getInsightsForMonth, currentMonthKey]
+  );
+
   return (
     <FinanceContext.Provider
       value={{
@@ -1197,6 +1666,33 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         updateSavingsTargetItem,
         deleteSavingsTargetItem,
         recordSavingsTransaction,
+        recordSplitSavingsDeposit,
+        recordTransfer,
+        budgetConfigs,
+        postSettlements,
+        currentMonthBudgetStatus,
+        currentMonthVerdict,
+        currentMonthInsights,
+        getBudgetStatusForMonth,
+        getVerdictForMonth,
+        getInsightsForMonth,
+        saveBudgetConfigForward,
+        settleMonthPostRemainder,
+        debts,
+        addDebt,
+        updateDebt,
+        deleteDebt,
+        toggleDebtStatus,
+        manualInvestments,
+        addManualInvestment,
+        updateManualInvestment,
+        deleteManualInvestment,
+        classInvestments,
+        addClassInvestment,
+        updateClassInvestment,
+        deleteClassInvestment,
+        emergencyFundPref,
+        updateEmergencyFundPref,
         goldTransactions,
         goldPortfolio,
         goldPrices,

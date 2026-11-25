@@ -24,7 +24,14 @@ interface SmartCalculatorsProps {
 }
 
 export const SmartCalculators: React.FC<SmartCalculatorsProps> = ({ onCreateSavingsTarget }) => {
-  const { transactions, totalBalance, thisMonthIncome, thisMonthExpense } = useFinance();
+  const {
+    transactions,
+    totalBalance,
+    thisMonthIncome,
+    thisMonthExpense,
+    emergencyFundPref,
+    updateEmergencyFundPref,
+  } = useFinance();
   const [activeTab, setActiveTab] = useState<CalculatorTab>('darurat');
 
   // Compute average monthly expenses and income from historical non-savings transactions
@@ -64,19 +71,52 @@ export const SmartCalculators: React.FC<SmartCalculatorsProps> = ({ onCreateSavi
   }, [transactions, thisMonthIncome, thisMonthExpense]);
 
   // =========================================================================
-  // 1. STATE & CALCULATIONS: KALKULATOR DANA DARURAT
+  // 1. STATE & CALCULATIONS: KALKULATOR DANA DARURAT (Ditentukan sendiri oleh user)
   // =========================================================================
-  const [familyStatus, setFamilyStatus] = useState<'single' | 'married' | 'married_kids'>('married');
   const [customMonthlyExpenseRaw, setCustomMonthlyExpenseRaw] = useState<string>('');
   const [useCustomExpense, setUseCustomExpense] = useState<boolean>(false);
-
-  const statusMultiplier = familyStatus === 'single' ? 3 : familyStatus === 'married' ? 6 : 9;
 
   const activeExpense = useCustomExpense && customMonthlyExpenseRaw
     ? parseRupiahInput(customMonthlyExpenseRaw)
     : avgMonthlyExpense;
 
-  const targetDanaDarurat = activeExpense * statusMultiplier;
+  const [multiplierInput, setMultiplierInput] = useState<string>(
+    emergencyFundPref ? String(emergencyFundPref.multiplier) : '9'
+  );
+  const [targetNominalRaw, setTargetNominalRaw] = useState<string>(
+    emergencyFundPref
+      ? String(emergencyFundPref.targetAmount)
+      : String(Math.round(avgMonthlyExpense * 9))
+  );
+
+  const numericMultiplier = Math.max(0, parseFloat(multiplierInput) || 0);
+  const targetDanaDarurat = parseRupiahInput(targetNominalRaw);
+
+  const handleMultiplierChange = (val: string) => {
+    setMultiplierInput(val);
+    const m = Math.max(0, parseFloat(val) || 0);
+    const computedTarget = Math.round(activeExpense * m);
+    setTargetNominalRaw(String(computedTarget));
+    updateEmergencyFundPref({
+      multiplier: m,
+      targetAmount: computedTarget,
+      monthlyExpenseBasis: activeExpense,
+    });
+  };
+
+  const handleTargetNominalChange = (rawVal: string) => {
+    const clean = rawVal.replace(/[^\d]/g, '');
+    setTargetNominalRaw(clean);
+    const nominal = clean ? parseInt(clean, 10) : 0;
+    const computedMult = activeExpense > 0 ? Number((nominal / activeExpense).toFixed(1)) : 0;
+    setMultiplierInput(String(computedMult));
+    updateEmergencyFundPref({
+      multiplier: computedMult,
+      targetAmount: nominal,
+      monthlyExpenseBasis: activeExpense,
+    });
+  };
+
   const currentEmergencyCoverage = targetDanaDarurat > 0 ? Math.min(100, Math.round((Math.max(0, totalBalance) / targetDanaDarurat) * 100)) : 0;
   const emergencyDeficit = Math.max(0, targetDanaDarurat - Math.max(0, totalBalance));
 
@@ -250,23 +290,67 @@ export const SmartCalculators: React.FC<SmartCalculatorsProps> = ({ onCreateSavi
               </div>
             </div>
 
-            {/* Status Keluarga */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                Status Keluarga
-              </label>
-              <select
-                value={familyStatus}
-                onChange={(e) => setFamilyStatus(e.target.value as any)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="single">Single / Lajang — Butuh 3x Pengeluaran</option>
-                <option value="married">Menikah tanpa Anak — Butuh 6x Pengeluaran</option>
-                <option value="married_kids">Menikah dengan Anak — Butuh 9x Pengeluaran</option>
-              </select>
-              <p className="text-[10px] text-slate-400">
-                Rekomendasi standar perencana keuangan independen untuk cadangan likuid keluarga.
-              </p>
+            {/* Pengali & Nominal Target Dana Darurat (Saling Mengikuti, ditentukan sendiri) */}
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Pengali Pengeluaran Bulanan (×)
+                  </label>
+                  <div className="flex items-center gap-1">
+                    {[3, 6, 9, 12].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => handleMultiplierChange(String(m))}
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border ${
+                          numericMultiplier === m
+                            ? 'bg-finance-600 text-white border-finance-600'
+                            : 'bg-cream-50 dark:bg-slate-800 border-finance-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
+                        }`}
+                      >
+                        {m}x
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="1"
+                    value={multiplierInput}
+                    onChange={(e) => handleMultiplierChange(e.target.value)}
+                    placeholder="Contoh: 6 atau 9"
+                    className="w-full px-3.5 py-2.5 pr-16 rounded-xl border border-finance-200 dark:border-slate-800 bg-cream-50 dark:bg-slate-950 text-xs font-extrabold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-finance-500"
+                  />
+                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                    × bulan
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Nominal Target Dana Darurat (Rp) — otomatis sinkron dengan pengali
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                    Rp
+                  </span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={targetNominalRaw ? Number(targetNominalRaw).toLocaleString('id-ID') : ''}
+                    onChange={(e) => handleTargetNominalChange(e.target.value)}
+                    placeholder="25.000.000"
+                    className="w-full pl-12 pr-3.5 py-2.5 rounded-xl border border-finance-200 dark:border-slate-800 bg-cream-50 dark:bg-slate-950 text-xs font-extrabold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-finance-500"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  Isi pengali atau langsung tulis nominal targetmu — angka preset Tabungan Dana Darurat ikut menyesuaikan pilihanmu.
+                </p>
+              </div>
             </div>
 
             {/* Pengeluaran Bulanan Basis */}
@@ -317,7 +401,7 @@ export const SmartCalculators: React.FC<SmartCalculatorsProps> = ({ onCreateSavi
                 <span>Rumus Target:</span>
               </div>
               <p className="text-[11px] font-semibold text-teal-700 dark:text-teal-300">
-                Target = {formatRupiah(activeExpense)} x {statusMultiplier} bulan = <strong>{formatRupiah(targetDanaDarurat)}</strong>
+                Target = {formatRupiah(activeExpense)} x {numericMultiplier} bulan = <strong>{formatRupiah(targetDanaDarurat)}</strong>
               </p>
             </div>
           </div>

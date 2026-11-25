@@ -125,12 +125,31 @@ export interface CategorySummary {
   percentage: number;
 }
 
+export type IndonesianBank =
+  | 'BCA'
+  | 'Mandiri'
+  | 'BRI'
+  | 'BNI'
+  | 'CIMB Niaga'
+  | 'Danamon'
+  | 'Permata'
+  | 'BTN'
+  | 'BSI'
+  | 'Jenius'
+  | 'Blu'
+  | 'SeaBank'
+  | 'Bank Jago'
+  | 'OCBC'
+  | 'Maybank';
+
 export interface SavingsTargetItem {
   id: string;
   user_id?: string;
   name: string;
   target_amount: number; // Total target dana yang ingin dicapai (misal: Rp 50.000.000)
-  current_amount: number; // Jumlah yang sudah terkumpul saat ini
+  current_amount: number; // Jumlah yang sudah terkumpul saat ini (= initial_balance + setor - tarik)
+  initial_balance?: number; // Saldo awal opsional (boleh kosong, bisa diisi belakangan)
+  bank_name?: IndonesianBank | string; // Nama bank Indonesia (tanpa nomor rekening)
   deadline_date?: string; // Tanggal target pencapaian (YYYY-MM atau YYYY-MM-DD)
   auto_calculate_monthly?: boolean; // Jika true, sistem otomatis menghitung target bulanan
   target_date?: string; // legacy support
@@ -142,6 +161,130 @@ export interface SavingsTargetItem {
 
 export type InputModalTab = 'expense' | 'income' | 'savings';
 export type SavingsActionType = 'deposit' | 'withdraw';
+
+// ==================== BUDGETING & TRANSFER TYPES ====================
+export type BudgetPostKind = 'expense' | 'savings' | 'investment' | 'custom';
+
+export interface BudgetPost {
+  id: string;
+  name: string;
+  percent: number;
+  amount: number;
+  kind: BudgetPostKind;
+  color?: string;
+}
+
+export interface MonthlyBudgetConfig {
+  effectiveFrom: string; // YYYY-MM (berlaku ke depan saja mulai bulan ini)
+  monthlyIncome: number;
+  posts: BudgetPost[];
+  updatedAt: string;
+}
+
+export type RemainderActionType = 'to_savings' | 'rollover' | 'withdraw_free';
+
+export interface MonthPostSettlement {
+  monthKey: string; // YYYY-MM
+  postId: string;
+  postName: string;
+  amount: number;
+  action: RemainderActionType;
+  targetSavingsId?: string;
+  targetSavingsName?: string;
+  settledAt: string;
+}
+
+export type TransferNodeType = 'main_wallet' | 'budget_post' | 'savings_target';
+
+export interface TransferNodeRef {
+  type: TransferNodeType;
+  id: string;
+  label: string;
+}
+
+export interface PosTransferPayload {
+  from: TransferNodeRef;
+  to: TransferNodeRef;
+  amount: number;
+  date: string;
+  notes?: string;
+}
+
+export interface SplitSavingsAllocation {
+  targetId: string;
+  amount: number;
+}
+
+// ==================== VERDICT & INSIGHTS TYPES ====================
+export type FinancialVerdictLevel = 'Baik' | 'Waspada' | 'Buruk';
+
+export interface FinancialVerdict {
+  level: FinancialVerdictLevel;
+  mood: MascotMood; // happy | neutral | sad
+  headline: string;
+  reasons: string[];
+  moneyTrail: {
+    income: number;
+    expenseTotal: number;
+    expenseByPost: { postId: string; postName: string; allocated: number; used: number; remaining: number }[];
+    savedThisMonth: number;
+    savingsTargetThisMonth: number;
+  };
+}
+
+// ==================== UTANG PIUTANG TYPES ====================
+export type DebtKind = 'utang' | 'piutang';
+export type DebtStatus = 'belum_lunas' | 'lunas';
+
+export interface DebtItem {
+  id: string;
+  user_id?: string;
+  kind: DebtKind;
+  person_name: string;
+  amount: number;
+  date: string; // YYYY-MM-DD
+  due_date?: string; // YYYY-MM-DD opsional
+  notes?: string;
+  status: DebtStatus;
+  paid_at?: string;
+  created_at: string;
+}
+
+// ==================== MANUAL & CLASS INVESTMENT TYPES ====================
+export type ManualAssetType = 'Saham' | 'Kripto' | 'Properti' | 'Lainnya';
+
+export interface ManualInvestment {
+  id: string;
+  user_id?: string;
+  name: string;
+  asset_type: ManualAssetType;
+  invested_amount: number;
+  purchase_date: string; // YYYY-MM-DD
+  current_value: number;
+  notes?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export type ClassStatus = 'Belum' | 'Selesai';
+
+export interface ClassInvestment {
+  id: string;
+  user_id?: string;
+  class_name: string;
+  cost: number;
+  date: string; // YYYY-MM-DD
+  status: ClassStatus;
+  notes?: string;
+  created_at: string;
+}
+
+export interface EmergencyFundPreference {
+  multiplier: number;
+  targetAmount: number;
+  monthlyExpenseBasis?: number;
+  updatedAt: string;
+}
 
 export interface PrintReportOptions {
   periodType: 'this_month' | 'specific_month' | 'yearly';

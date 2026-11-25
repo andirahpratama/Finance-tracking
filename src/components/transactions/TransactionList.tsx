@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Edit2, Trash2, Calendar, AlertCircle, BookmarkCheck } from 'lucide-react';
+import { Edit2, Trash2, AlertCircle, BookmarkCheck, ArrowLeftRight } from 'lucide-react';
 import { Transaction } from '../../types';
 import { CategoryIcon } from '../ui/CategoryIcon';
 import { formatDateIndo, formatRupiah, formatNotesForDisplay } from '../../lib/formatters';
-import { isSavingsTransaction } from '../../lib/savingsUtils';
+import { isSavingsTransaction, parseTransferMeta } from '../../lib/savingsUtils';
+import { CatFinnySvg } from '../mascot/CatFinnySvg';
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -33,17 +34,17 @@ export const TransactionList: React.FC<TransactionListProps> = ({
 
   if (transactions.length === 0 && !hasOpeningBalance) {
     return (
-      <div className="flex flex-col items-center justify-center p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-dashed border-slate-200 dark:border-slate-800 text-center">
-        <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-3">
-          <Calendar className="w-7 h-7" />
+      <div className="flex flex-col items-center justify-center p-8 sm:p-10 rounded-2xl bg-cream-50 dark:bg-slate-900/60 border border-dashed border-finance-200 dark:border-slate-800 text-center">
+        <div className="mb-3">
+          <CatFinnySvg mood="happy" size={88} idPrefix="txListEmptyCat" />
         </div>
         <h4 className="text-base font-semibold text-slate-900 dark:text-white">Tidak ada transaksi ditemukan</h4>
         <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mt-1 mb-4">
-          Tidak ada data transaksi yang cocok dengan filter yang Anda pilih saat ini.
+          Belum ada catatan yang cocok dengan filter yang kamu pilih saat ini.
         </p>
         <button
           onClick={onAddNew}
-          className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md shadow-emerald-500/20 dark:shadow-emerald-950 transition-all"
+          className="px-4 py-2 rounded-xl bg-finance-600 hover:bg-finance-700 text-white text-xs font-semibold shadow-sm transition-all"
         >
           + Catat Transaksi Baru
         </button>
@@ -92,6 +93,12 @@ export const TransactionList: React.FC<TransactionListProps> = ({
       <AnimatePresence mode="popLayout">
         {transactions.map((t) => {
           const isIncome = t.type === 'income';
+          const isTransfer =
+            isSavingsTransaction(t) ||
+            (t.category_name || '').toLowerCase().includes('tabungan') ||
+            (t.notes || '').toLowerCase().includes('tabungan') ||
+            t.category_icon === 'PiggyBank';
+          const transferMeta = parseTransferMeta(t.notes);
 
           return (
             <motion.div
@@ -101,55 +108,51 @@ export const TransactionList: React.FC<TransactionListProps> = ({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.2 }}
-              className="group relative p-3.5 sm:p-4 rounded-2xl bg-white dark:bg-slate-900/80 hover:bg-slate-50 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700/80 transition-all shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+              className="group relative p-3.5 sm:p-4 rounded-2xl bg-white dark:bg-slate-900/80 hover:bg-cream-50 dark:hover:bg-slate-850 border border-finance-100 dark:border-slate-800/80 hover:border-finance-300 transition-all shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
             >
-              {/* Left Column: Icon & Details */}
+              {/* Left Column: Icon & Details (Transfer Kas TIDAK membawa label kategori!) */}
               <div className="flex items-start sm:items-center gap-3.5 min-w-0 flex-1">
                 <div
-                  className="w-10 h-10 rounded-xl flex items-center justify-center text-white flex-shrink-0 shadow-md mt-0.5 sm:mt-0"
-                  style={{ backgroundColor: t.category_color || '#64748B' }}
+                  className="w-10 h-10 rounded-xl flex items-center justify-center text-white flex-shrink-0 shadow-sm mt-0.5 sm:mt-0"
+                  style={{ backgroundColor: isTransfer ? '#0d9488' : (t.category_color || '#64748B') }}
                 >
-                  <CategoryIcon name={t.category_icon || 'Wallet'} className="w-5 h-5" />
+                  {isTransfer ? (
+                    <ArrowLeftRight className="w-5 h-5" />
+                  ) : (
+                    <CategoryIcon name={t.category_icon || 'Wallet'} className="w-5 h-5" />
+                  )}
                 </div>
 
                 <div className="min-w-0 flex-1 space-y-1">
                   <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                     <span className="font-bold text-slate-900 dark:text-white text-sm sm:text-base leading-snug break-words">
-                      {t.category_name || 'Lainnya'}
+                      {isTransfer
+                        ? transferMeta
+                          ? `${transferMeta.fromLabel} → ${transferMeta.toLabel}`
+                          : 'Transfer Kas'
+                        : t.category_name || 'Lainnya'}
                     </span>
-                    {(() => {
-                      const isSavings =
-                        isSavingsTransaction(t) ||
-                        (t.category_name || '').toLowerCase().includes('tabungan') ||
-                        (t.notes || '').toLowerCase().includes('tabungan') ||
-                        t.category_icon === 'PiggyBank';
-
-                      if (isSavings) {
-                        return (
-                          <span
-                            className={`text-[10px] px-2 py-0.5 rounded-full font-bold border shrink-0 ${
-                              isIncome
-                                ? 'bg-amber-500/10 text-amber-600 dark:text-amber-300 border-amber-500/20'
-                                : 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-300 border-cyan-500/20'
-                            }`}
-                          >
-                            {isIncome ? 'Transfer Kas: Tarik (+)' : 'Transfer Kas: Setor (-)'}
-                          </span>
-                        );
-                      }
-
-                      return (
-                        <span
-                          className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border shrink-0 ${
-                            isIncome
-                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border-emerald-500/20'
-                              : 'bg-rose-500/10 text-rose-600 dark:text-rose-300 border-rose-500/20'
-                          }`}
-                        >
-                          {isIncome ? 'Pemasukan' : 'Pengeluaran'}
-                        </span>
-                      );
-                    })()}
+                    {isTransfer ? (
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-bold border shrink-0 ${
+                          isIncome
+                            ? 'bg-gold-100 text-amber-800 border-gold-300'
+                            : 'bg-teal-500/10 text-teal-700 dark:text-teal-300 border-teal-500/20'
+                        }`}
+                      >
+                        Transfer Kas
+                      </span>
+                    ) : (
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border shrink-0 ${
+                          isIncome
+                            ? 'bg-finance-100 text-finance-700 dark:text-finance-300 border-finance-300'
+                            : 'bg-rose-500/10 text-rose-600 dark:text-rose-300 border-rose-500/20'
+                        }`}
+                      >
+                        {isIncome ? 'Pemasukan' : 'Pengeluaran'}
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">

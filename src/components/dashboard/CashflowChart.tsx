@@ -474,8 +474,9 @@ export const CashflowChart: React.FC<CashflowChartProps> = ({ transactions }) =>
                     <p className={`text-[10px] font-semibold uppercase tracking-wide text-${item.color}-600 dark:text-${item.color}-400 mb-1`}>
                       {item.label}
                     </p>
-                    <p className={`text-sm font-extrabold text-${item.color}-700 dark:text-${item.color}-300`}>
-                      {formatCompactRupiah(Math.abs(item.val))}
+                    <p className={`text-xs sm:text-sm font-extrabold text-${item.color}-700 dark:text-${item.color}-300`}>
+                      {item.val < 0 ? '-' : ''}
+                      {formatRupiah(Math.abs(item.val))}
                     </p>
                   </div>
                 ))}
@@ -517,7 +518,9 @@ export const CashflowChart: React.FC<CashflowChartProps> = ({ transactions }) =>
                   <Bar dataKey="expense" name="Pengeluaran" fill="url(#expGradM)" radius={[3, 3, 0, 0]} maxBarSize={16} />
                   <Legend
                     wrapperStyle={{ fontSize: '11px', paddingTop: '12px' }}
-                    formatter={(value) => (value === 'income' ? 'Pemasukan' : 'Pengeluaran')}
+                    formatter={(value) =>
+                      value === 'income' || value === 'Pemasukan' ? 'Pemasukan' : 'Pengeluaran'
+                    }
                   />
                 </BarChart>
               </ResponsiveContainer>
@@ -550,8 +553,9 @@ export const CashflowChart: React.FC<CashflowChartProps> = ({ transactions }) =>
                   {item.label}
                 </p>
                 {item.val !== null ? (
-                  <p className={`text-sm font-extrabold text-${item.color}-700 dark:text-${item.color}-300`}>
-                    {formatCompactRupiah(Math.abs(item.val ?? 0))}
+                  <p className={`text-xs sm:text-sm font-extrabold text-${item.color}-700 dark:text-${item.color}-300`}>
+                    {(item.val ?? 0) < 0 ? '-' : ''}
+                    {formatRupiah(Math.abs(item.val ?? 0))}
                   </p>
                 ) : (
                   <p className={`text-sm font-extrabold text-${item.color}-700 dark:text-${item.color}-300`}>
@@ -604,7 +608,9 @@ export const CashflowChart: React.FC<CashflowChartProps> = ({ transactions }) =>
                   <Bar dataKey="expense" name="Pengeluaran" fill="url(#expGradY)" radius={[3, 3, 0, 0]} maxBarSize={20} />
                   <Legend
                     wrapperStyle={{ fontSize: '11px', paddingTop: '12px' }}
-                    formatter={(value) => (value === 'income' ? 'Pemasukan' : 'Pengeluaran')}
+                    formatter={(value) =>
+                      value === 'income' || value === 'Pemasukan' ? 'Pemasukan' : 'Pengeluaran'
+                    }
                   />
                 </BarChart>
               </ResponsiveContainer>

@@ -7,7 +7,8 @@ import {
   CalendarCheck,
 } from 'lucide-react';
 import { Transaction } from '../../types';
-import { formatRupiah, formatDateFullIndo } from '../../lib/formatters';
+import { formatRupiah, formatDateFullIndo, formatNotesForDisplay } from '../../lib/formatters';
+import { isSavingsTransaction } from '../../lib/savingsUtils';
 import { CategoryIcon } from '../ui/CategoryIcon';
 
 interface MonthlyActivityCalendarProps {
@@ -141,12 +142,15 @@ export const MonthlyActivityCalendar: React.FC<MonthlyActivityCalendarProps> = (
         
         const amount = parseAmount(tx.amount);
         const txType = (tx.type || '').toLowerCase();
+        const isTransfer = isSavingsTransaction(tx);
 
-        // Count every expense transaction inputted for this day
-        if (txType === 'expense') {
-          existing.totalExpense += amount;
-        } else if (txType === 'income') {
-          existing.totalIncome += amount;
+        // Exclude Transfer Kas from daily expense/income totals
+        if (!isTransfer) {
+          if (txType === 'expense') {
+            existing.totalExpense += amount;
+          } else if (txType === 'income') {
+            existing.totalIncome += amount;
+          }
         }
 
         existing.transactions.push(tx);
@@ -400,6 +404,7 @@ export const MonthlyActivityCalendar: React.FC<MonthlyActivityCalendarProps> = (
             {selectedDayInfo.transactions.length > 0 ? (
               selectedDayInfo.transactions.map((tx) => {
                 const isExpense = (tx.type || '').toLowerCase() === 'expense';
+                const isTransfer = isSavingsTransaction(tx);
                 return (
                   <div
                     key={tx.id}
@@ -410,18 +415,18 @@ export const MonthlyActivityCalendar: React.FC<MonthlyActivityCalendarProps> = (
                       <div
                         className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
                         style={{
-                          backgroundColor: `${tx.category_color || '#10B981'}20`,
-                          color: tx.category_color || '#10B981',
+                          backgroundColor: isTransfer ? '#0d948820' : `${tx.category_color || '#4a8c67'}20`,
+                          color: isTransfer ? '#0d9488' : (tx.category_color || '#4a8c67'),
                         }}
                       >
-                        <CategoryIcon name={tx.category_icon} className="w-4 h-4" />
+                        <CategoryIcon name={isTransfer ? 'ArrowLeftRight' : tx.category_icon} className="w-4 h-4" />
                       </div>
                       <div className="truncate">
                         <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                          {tx.notes || tx.category_name || (isExpense ? 'Pengeluaran' : 'Pemasukan')}
+                          {formatNotesForDisplay(tx.notes) || (isTransfer ? 'Transfer Kas' : tx.category_name) || (isExpense ? 'Pengeluaran' : 'Pemasukan')}
                         </p>
                         <span className="text-[10px] text-slate-400 block truncate">
-                          {tx.category_name}
+                          {isTransfer ? 'Transfer Kas' : tx.category_name}
                         </span>
                       </div>
                     </div>

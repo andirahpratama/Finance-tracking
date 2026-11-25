@@ -1,16 +1,47 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Target, Trash2, Plus, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
+import {
+  X,
+  Target,
+  Trash2,
+  Plus,
+  Sparkles,
+  CheckCircle2,
+  AlertCircle,
+  ShieldAlert,
+  GraduationCap,
+  Palmtree,
+  PiggyBank,
+  Check,
+  Building2,
+} from 'lucide-react';
 import { useFinance } from '../../context/FinanceContext';
 import { formatRupiah, parseRupiahInput } from '../../lib/formatters';
 import { calculateSavingsProgress } from '../../lib/savingsUtils';
+import { INDONESIAN_BANKS } from '../../lib/defaultData';
 import { SavingsTargetItem } from '../../types';
+import { BankLogo } from '../ui/BankLogo';
 
 interface SavingsTargetModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialData?: Partial<SavingsTargetItem> | null;
 }
+
+const getPresetIcon = (iconName?: string) => {
+  switch (iconName) {
+    case 'Palmtree':
+      return Palmtree;
+    case 'GraduationCap':
+      return GraduationCap;
+    case 'ShieldAlert':
+      return ShieldAlert;
+    case 'PiggyBank':
+      return PiggyBank;
+    default:
+      return Target;
+  }
+};
 
 export const SavingsTargetModal: React.FC<SavingsTargetModalProps> = ({
   isOpen,
@@ -22,6 +53,7 @@ export const SavingsTargetModal: React.FC<SavingsTargetModalProps> = ({
     addSavingsTargetItem,
     updateSavingsTargetItem,
     deleteSavingsTargetItem,
+    emergencyFundPref,
     appCurrency,
   } = useFinance();
 
@@ -29,86 +61,114 @@ export const SavingsTargetModal: React.FC<SavingsTargetModalProps> = ({
   const defaultDeadline = `${currentYear + 1}-12`;
 
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [selectedPresetName, setSelectedPresetName] = useState<string | null>(null);
   const [name, setName] = useState<string>('');
+  const [bankName, setBankName] = useState<string>('BCA');
+  const [initialBalanceRaw, setInitialBalanceRaw] = useState<string>(''); // Boleh kosong!
   const [targetRaw, setTargetRaw] = useState<string>('25000000');
   const [deadlineDate, setDeadlineDate] = useState<string>(defaultDeadline);
   const [autoCalculateMonthly, setAutoCalculateMonthly] = useState<boolean>(true);
   const [icon, setIcon] = useState<string>('Target');
-  const [color, setColor] = useState<string>('#10b981');
+  const [color, setColor] = useState<string>('#4a8c67');
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [successMsg, setSuccessMsg] = useState<string>('');
 
-  const presetChoices = [
-    {
-      name: 'Tabungan Dana Darurat',
-      icon: 'ShieldAlert',
-      color: '#10b981',
-      target: 25000000,
-      deadline: `${currentYear + 1}-12`,
-    },
-    {
-      name: 'Tabungan Pendidikan Anak',
-      icon: 'GraduationCap',
-      color: '#3b82f6',
-      target: 40000000,
-      deadline: `${currentYear + 3}-07`,
-    },
-    {
-      name: 'Tabungan Liburan Keluarga',
-      icon: 'Palmtree',
-      color: '#06b6d4',
-      target: 15000000,
-      deadline: `${currentYear}-12`,
-    },
-    {
-      name: 'Tabungan Pensiun & Hari Tua',
-      icon: 'PiggyBank',
-      color: '#8b5cf6',
-      target: 100000000,
-      deadline: `${currentYear + 5}-12`,
-    },
-  ];
+  const emergencySuggestedTarget = emergencyFundPref?.targetAmount || 25000000;
+
+  const presetChoices = useMemo(
+    () => [
+      {
+        name: 'Tabungan Dana Darurat',
+        icon: 'ShieldAlert',
+        color: '#4a8c67',
+        target: emergencySuggestedTarget,
+        deadline: `${currentYear + 1}-12`,
+      },
+      {
+        name: 'Tabungan Pendidikan Anak',
+        icon: 'GraduationCap',
+        color: '#3b82f6',
+        target: 40000000,
+        deadline: `${currentYear + 3}-07`,
+      },
+      {
+        name: 'Tabungan Liburan Keluarga',
+        icon: 'Palmtree',
+        color: '#0d9488',
+        target: 15000000,
+        deadline: `${currentYear}-12`,
+      },
+      {
+        name: 'Tabungan Pensiun & Hari Tua',
+        icon: 'PiggyBank',
+        color: '#8b5cf6',
+        target: 100000000,
+        deadline: `${currentYear + 5}-12`,
+      },
+    ],
+    [currentYear, emergencySuggestedTarget]
+  );
 
   useEffect(() => {
     if (isOpen) {
       setErrorMsg('');
       setSuccessMsg('');
+      setSelectedPresetName(null);
 
       if (initialData) {
-        setEditingId(null);
+        setEditingId(initialData.id || null);
         setName(initialData.name || '');
-        setTargetRaw((initialData.target_amount || 25000000).toString());
+        setBankName(initialData.bank_name || 'BCA');
+        setInitialBalanceRaw(
+          initialData.initial_balance && initialData.initial_balance > 0
+            ? String(initialData.initial_balance)
+            : ''
+        );
+        setTargetRaw((initialData.target_amount || emergencySuggestedTarget).toString());
         setDeadlineDate(initialData.deadline_date || defaultDeadline);
         setAutoCalculateMonthly(initialData.auto_calculate_monthly ?? true);
         setIcon(initialData.category_icon || 'Target');
-        setColor(initialData.color || '#10b981');
+        setColor(initialData.color || '#4a8c67');
       } else {
         setEditingId(null);
         setName('');
-        setTargetRaw('25000000');
+        setBankName('BCA');
+        setInitialBalanceRaw('');
+        setTargetRaw(String(emergencySuggestedTarget));
         setDeadlineDate(defaultDeadline);
         setAutoCalculateMonthly(true);
         setIcon('Target');
-        setColor('#10b981');
+        setColor('#4a8c67');
       }
     }
-  }, [isOpen, initialData, defaultDeadline]);
+  }, [isOpen, initialData, defaultDeadline, emergencySuggestedTarget]);
 
-  // Real-time calculation preview of monthly target
+  const editingItem = editingId ? savingsTargets.find((s) => s.id === editingId) : null;
+
   const liveCalculation = useMemo(() => {
     const targetAmount = parseRupiahInput(targetRaw);
+    const initBal = parseRupiahInput(initialBalanceRaw);
+    let previewCurrent = initBal;
+    if (editingItem) {
+      const oldInit = Number(editingItem.initial_balance) || 0;
+      const netMoves = Math.max(0, (Number(editingItem.current_amount) || 0) - oldInit);
+      previewCurrent = initBal + netMoves;
+    }
+
     const mockItem: SavingsTargetItem = {
       id: 'mock',
       name: name || 'Preview',
       target_amount: targetAmount,
-      current_amount: 0,
+      current_amount: previewCurrent,
+      initial_balance: initBal,
       deadline_date: deadlineDate,
       auto_calculate_monthly: autoCalculateMonthly,
     };
     return calculateSavingsProgress(mockItem);
-  }, [targetRaw, deadlineDate, autoCalculateMonthly, name]);
+  }, [targetRaw, initialBalanceRaw, deadlineDate, autoCalculateMonthly, name, editingItem]);
 
   const handleSelectPreset = (preset: typeof presetChoices[0]) => {
+    setSelectedPresetName(preset.name);
     setName(preset.name);
     setIcon(preset.icon);
     setColor(preset.color);
@@ -136,9 +196,13 @@ export const SavingsTargetModal: React.FC<SavingsTargetModalProps> = ({
       return;
     }
 
+    const initBalance = parseRupiahInput(initialBalanceRaw); // 0 jika dibiarkan kosong
+
     if (editingId) {
       await updateSavingsTargetItem(editingId, {
         name: name.trim(),
+        bank_name: bankName,
+        initial_balance: initBalance,
         target_amount: targetAmount,
         deadline_date: deadlineDate,
         auto_calculate_monthly: autoCalculateMonthly,
@@ -149,8 +213,10 @@ export const SavingsTargetModal: React.FC<SavingsTargetModalProps> = ({
     } else {
       await addSavingsTargetItem({
         name: name.trim(),
+        bank_name: bankName,
+        initial_balance: initBalance,
+        current_amount: initBalance,
         target_amount: targetAmount,
-        current_amount: 0,
         deadline_date: deadlineDate,
         auto_calculate_monthly: autoCalculateMonthly,
         category_icon: icon,
@@ -160,20 +226,27 @@ export const SavingsTargetModal: React.FC<SavingsTargetModalProps> = ({
     }
 
     setName('');
-    setTargetRaw('25000000');
+    setInitialBalanceRaw('');
+    setTargetRaw(String(emergencySuggestedTarget));
     setDeadlineDate(defaultDeadline);
     setEditingId(null);
+    setSelectedPresetName(null);
     setTimeout(() => setSuccessMsg(''), 2500);
   };
 
   const handleStartEdit = (item: SavingsTargetItem) => {
     setEditingId(item.id);
+    setSelectedPresetName(null);
     setName(item.name);
+    setBankName(item.bank_name || 'BCA');
+    setInitialBalanceRaw(
+      item.initial_balance && item.initial_balance > 0 ? String(item.initial_balance) : ''
+    );
     setTargetRaw(item.target_amount.toString());
     setDeadlineDate(item.deadline_date || defaultDeadline);
     setAutoCalculateMonthly(item.auto_calculate_monthly ?? true);
     setIcon(item.category_icon || 'Target');
-    setColor(item.color || '#10b981');
+    setColor(item.color || '#4a8c67');
     setErrorMsg('');
   };
 
@@ -193,20 +266,20 @@ export const SavingsTargetModal: React.FC<SavingsTargetModalProps> = ({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 16 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col z-10"
+            className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl border border-finance-200 dark:border-slate-800 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col z-10"
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/50">
+            <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-finance-100 dark:border-slate-800/80 bg-cream-50 dark:bg-slate-900/50">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white shadow-md shadow-emerald-500/20">
+                <div className="p-2.5 rounded-2xl bg-finance-600 text-white shadow-md">
                   <Target className="w-5 h-5" />
                 </div>
                 <div>
                   <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
-                    Goal-Based Savings System
+                    Kelola Pos & Target Tabungan
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Atur target dana, tenggat waktu & kalkulasi setoran bulanan
+                    Pilih bank penyimpan, saldo awal opsional, & target tabungan
                   </p>
                 </div>
               </div>
@@ -219,49 +292,62 @@ export const SavingsTargetModal: React.FC<SavingsTargetModalProps> = ({
             </div>
 
             <div className="p-5 overflow-y-auto space-y-5">
-              {/* Presets Grid */}
+              {/* Presets Grid (HANYA preset terpilih yang menampilkan centang!) */}
               <div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2">
                   Preset Cepat Pos Tabungan
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {presetChoices.map((p) => (
-                    <button
-                      key={p.name}
-                      type="button"
-                      onClick={() => handleSelectPreset(p)}
-                      className="flex items-center gap-2.5 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/60 hover:border-emerald-500/50 hover:bg-emerald-50/20 dark:hover:bg-emerald-950/20 transition-all text-left group"
-                    >
-                      <div
-                        className="w-8 h-8 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-sm"
-                        style={{ backgroundColor: p.color }}
+                  {presetChoices.map((p) => {
+                    const PresetIcon = getPresetIcon(p.icon);
+                    const isSelected = selectedPresetName === p.name;
+                    return (
+                      <button
+                        key={p.name}
+                        type="button"
+                        onClick={() => handleSelectPreset(p)}
+                        className={`relative flex items-center gap-2.5 p-3 rounded-2xl border transition-all text-left ${
+                          isSelected
+                            ? 'border-finance-500 bg-finance-50/70 dark:bg-finance-950/30 ring-1 ring-finance-500'
+                            : 'border-finance-100 dark:border-slate-800 bg-cream-50 dark:bg-slate-950/60 hover:border-finance-400'
+                        }`}
                       >
-                        ✓
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                          {p.name}
-                        </p>
-                        <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                          {formatRupiah(p.target)}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
+                        {isSelected && (
+                          <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-finance-600 text-white flex items-center justify-center">
+                            <Check className="w-2.5 h-2.5 stroke-[3]" />
+                          </span>
+                        )}
+                        <div
+                          className="w-8 h-8 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
+                          style={{ backgroundColor: p.color }}
+                        >
+                          <PresetIcon className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0 pr-4">
+                          <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                            {p.name}
+                          </p>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                            {formatRupiah(p.target)}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
               {/* Form Input Item */}
               <form
                 onSubmit={handleSaveItem}
-                className="p-4 sm:p-5 rounded-2xl bg-slate-50/80 dark:bg-slate-950/70 border border-slate-200/80 dark:border-slate-800/80 space-y-4"
+                className="p-4 sm:p-5 rounded-2xl bg-cream-50 dark:bg-slate-950/70 border border-finance-200/70 dark:border-slate-800/80 space-y-4"
               >
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-extrabold text-slate-900 dark:text-white uppercase tracking-wider">
                     {editingId ? 'Edit Pos Tabungan' : 'Form Pos Tabungan Baru'}
                   </h3>
                   {editingId && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 font-bold border border-amber-500/20">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-gold-100 text-amber-800 font-bold border border-gold-300">
                       Mode Edit
                     </span>
                   )}
@@ -275,10 +361,61 @@ export const SavingsTargetModal: React.FC<SavingsTargetModalProps> = ({
                   <input
                     type="text"
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Contoh: Tabungan Pendidikan S2, Mobil Baru, dll"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    onChange={(e) => {
+                      setName(e.target.value);
+                      setSelectedPresetName(null);
+                    }}
+                    placeholder="Contoh: Dana Darurat, Pendidikan Anak, Liburan"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-finance-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-finance-500"
                   />
+                </div>
+
+                {/* Bank Penyimpan (Tanpa Nomor Rekening) */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                    <Building2 className="w-3.5 h-3.5 text-finance-600" />
+                    Bank Penyimpan (tanpa nomor rekening)
+                  </label>
+                  <div className="flex items-center gap-2.5">
+                    <BankLogo bankName={bankName} size="md" />
+                    <select
+                      value={bankName}
+                      onChange={(e) => setBankName(e.target.value)}
+                      className="flex-1 px-3.5 py-2.5 rounded-xl border border-finance-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-finance-500"
+                    >
+                      {INDONESIAN_BANKS.map((bank) => (
+                        <option key={bank.id} value={bank.id}>
+                          {bank.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Saldo Awal (Opsional — boleh kosong) */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Saldo Awal (Opsional — boleh kosong)
+                    </label>
+                    <span className="text-[10px] text-slate-400">Bisa diisi belakangan</span>
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                      {appCurrency}
+                    </span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={initialBalanceRaw ? Number(initialBalanceRaw).toLocaleString('id-ID') : ''}
+                      onChange={(e) => setInitialBalanceRaw(e.target.value.replace(/[^\d]/g, ''))}
+                      placeholder="Kosongkan jika mulai dari 0"
+                      className="w-full pl-14 pr-3.5 py-2.5 rounded-xl border border-finance-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-extrabold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-finance-500"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Saldo pos dihitung: Saldo Awal + Setor − Tarik (tidak mengubah riwayat transaksi lama).
+                  </p>
                 </div>
 
                 {/* Target Amount & Deadline Date */}
@@ -293,10 +430,11 @@ export const SavingsTargetModal: React.FC<SavingsTargetModalProps> = ({
                       </span>
                       <input
                         type="text"
+                        inputMode="numeric"
                         value={targetRaw ? Number(targetRaw).toLocaleString('id-ID') : ''}
                         onChange={(e) => setTargetRaw(e.target.value.replace(/[^\d]/g, ''))}
-                        placeholder="50.000.000"
-                        className="w-full pl-14 pr-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-extrabold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        placeholder="25.000.000"
+                        className="w-full pl-14 pr-3.5 py-2.5 rounded-xl border border-finance-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-extrabold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-finance-500"
                       />
                     </div>
                   </div>
@@ -305,46 +443,50 @@ export const SavingsTargetModal: React.FC<SavingsTargetModalProps> = ({
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                       Tenggat Waktu (Deadline)
                     </label>
-                    <div className="relative">
-                      <input
-                        type="month"
-                        value={deadlineDate}
-                        onChange={(e) => setDeadlineDate(e.target.value)}
-                        className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                      />
-                    </div>
+                    <input
+                      type="month"
+                      value={deadlineDate}
+                      onChange={(e) => setDeadlineDate(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl border border-finance-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-finance-500"
+                    />
                   </div>
                 </div>
 
-                {/* Smart Calculation Insight Banner */}
-                {liveCalculation.monthlyTarget > 0 && (
-                  <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300 space-y-1">
-                    <div className="flex items-center gap-1.5 font-bold text-xs">
-                      <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
-                      <span>Rekomendasi Setoran Otomatis:</span>
-                    </div>
-                    <p className="text-xs font-extrabold text-emerald-700 dark:text-emerald-400">
-                      {formatRupiah(liveCalculation.monthlyTarget)} / bulan
-                    </p>
-                    <p className="text-[10px] text-emerald-600/80 dark:text-emerald-300/70">
-                      Dengan sisa waktu {liveCalculation.remainingMonths} bulan hingga target {deadlineDate}.
-                    </p>
+                {/* Smart Calculation Insight Banner: (target - saldo terkumpul) / sisa bulan */}
+                <div className="p-3.5 rounded-xl bg-finance-50 dark:bg-finance-950/30 border border-finance-200 text-finance-800 dark:text-finance-200 space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold text-xs">
+                    <Sparkles className="w-3.5 h-3.5 text-finance-600" />
+                    <span>Rekomendasi Setoran Otomatis:</span>
                   </div>
-                )}
+                  {liveCalculation.isAchieved ? (
+                    <p className="text-xs font-extrabold text-finance-700">
+                      Target sudah tercapai dengan saldo saat ini!
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-xs font-extrabold text-finance-700 dark:text-finance-300">
+                        {formatRupiah(liveCalculation.monthlyTarget)} / bulan
+                      </p>
+                      <p className="text-[10px] text-finance-700/80 dark:text-finance-300/70">
+                        Sisa kebutuhan {formatRupiah(liveCalculation.remainingAmount)} dibagi {liveCalculation.remainingMonths} bulan hingga {deadlineDate}.
+                      </p>
+                    </>
+                  )}
+                </div>
 
                 {/* Color Selector */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Warna Pos Tabungan
+                    Warna Kartu Pos
                   </label>
                   <div className="flex items-center gap-2">
                     {[
-                      '#10b981',
-                      '#06b6d4',
+                      '#4a8c67',
+                      '#0d9488',
                       '#3b82f6',
                       '#8b5cf6',
                       '#ec4899',
-                      '#f59e0b',
+                      '#d49a22',
                       '#ef4444',
                     ].map((c) => (
                       <button
@@ -352,7 +494,7 @@ export const SavingsTargetModal: React.FC<SavingsTargetModalProps> = ({
                         type="button"
                         onClick={() => setColor(c)}
                         className={`w-7 h-7 rounded-xl transition-all ${
-                          color === c ? 'scale-110 ring-2 ring-offset-2 ring-emerald-500' : 'opacity-70 hover:opacity-100'
+                          color === c ? 'scale-110 ring-2 ring-offset-2 ring-finance-500' : 'opacity-70 hover:opacity-100'
                         }`}
                         style={{ backgroundColor: c }}
                       />
@@ -361,14 +503,14 @@ export const SavingsTargetModal: React.FC<SavingsTargetModalProps> = ({
                 </div>
 
                 {errorMsg && (
-                  <div className="flex items-center gap-2 text-xs text-rose-500 font-bold p-2.5 rounded-xl bg-rose-50 dark:bg-rose-500/10 border border-rose-500/20">
+                  <div className="flex items-center gap-2 text-xs text-rose-500 font-bold p-2.5 rounded-xl bg-rose-50 border border-rose-200">
                     <AlertCircle className="w-4 h-4 shrink-0" />
                     <span>{errorMsg}</span>
                   </div>
                 )}
 
                 {successMsg && (
-                  <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 font-bold p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-500/20">
+                  <div className="flex items-center gap-2 text-xs text-finance-700 font-bold p-2.5 rounded-xl bg-finance-50 border border-finance-200">
                     <CheckCircle2 className="w-4 h-4 shrink-0" />
                     <span>{successMsg}</span>
                   </div>
@@ -381,17 +523,18 @@ export const SavingsTargetModal: React.FC<SavingsTargetModalProps> = ({
                       onClick={() => {
                         setEditingId(null);
                         setName('');
-                        setTargetRaw('25000000');
+                        setInitialBalanceRaw('');
+                        setTargetRaw(String(emergencySuggestedTarget));
                         setDeadlineDate(defaultDeadline);
                       }}
-                      className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+                      className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800"
                     >
                       Batal
                     </button>
                   )}
                   <button
                     type="submit"
-                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-bold shadow-md shadow-emerald-600/30 active:scale-95 transition-all"
+                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-finance-600 hover:bg-finance-700 text-white text-xs font-bold shadow-md active:scale-95 transition-all"
                   >
                     <Plus className="w-4 h-4" />
                     {editingId ? 'Simpan Perubahan' : 'Simpan Pos Tabungan'}
@@ -401,56 +544,53 @@ export const SavingsTargetModal: React.FC<SavingsTargetModalProps> = ({
 
               {/* List of Existing Savings Targets */}
               <div className="space-y-2.5 pt-1">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
                   Daftar Pos Tabungan Aktif ({savingsTargets.length})
                 </span>
 
                 {savingsTargets.length === 0 ? (
-                  <div className="p-4 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center text-xs text-slate-400">
+                  <div className="p-4 rounded-xl border border-dashed border-finance-200 dark:border-slate-800 text-center text-xs text-slate-400">
                     Belum ada pos tabungan. Buat sekarang atau pilih preset di atas!
                   </div>
                 ) : (
                   <div className="space-y-2">
                     {savingsTargets.map((item) => {
                       const prog = calculateSavingsProgress(item);
+                      const ItemIcon = getPresetIcon(item.category_icon);
                       return (
                         <div
                           key={item.id}
-                          className="flex items-center justify-between p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60 shadow-sm"
+                          className="flex items-center justify-between p-3.5 rounded-2xl border border-finance-100 dark:border-slate-800 bg-white dark:bg-slate-950/60 shadow-xs"
                         >
                           <div className="flex items-center gap-3 min-w-0 flex-1">
                             <div
-                              className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-sm"
-                              style={{ backgroundColor: item.color || '#10b981' }}
+                              className="w-8 h-8 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
+                              style={{ backgroundColor: item.color || '#4a8c67' }}
                             >
-                              ✓
+                              <ItemIcon className="w-4 h-4" />
                             </div>
                             <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
                                   {item.name}
                                 </p>
+                                {item.bank_name && <BankLogo bankName={item.bank_name} size="sm" />}
                                 <span
                                   className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold border shrink-0 ${
                                     prog.isAchieved
-                                      ? 'bg-emerald-500/20 text-emerald-600 border-emerald-500/30'
+                                      ? 'bg-finance-100 text-finance-700 border-finance-300'
                                       : prog.isOnTrack
-                                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                                      ? 'bg-finance-50 text-finance-700 border-finance-200'
+                                      : 'bg-gold-50 text-amber-700 border-gold-300'
                                   }`}
                                 >
-                                  {prog.isAchieved ? 'Tercapai 🎉' : prog.isOnTrack ? 'On Track 🚀' : 'Off Track ⚠️'}
+                                  {prog.isAchieved ? 'Tercapai' : prog.isOnTrack ? 'On Track' : 'Perlu Setoran'}
                                 </span>
                               </div>
                               <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                                Terkumpul: <strong className="text-emerald-600 dark:text-emerald-400 font-bold">{formatRupiah(item.current_amount)}</strong> dari target{' '}
-                                <strong className="text-slate-700 dark:text-slate-300 font-semibold">{formatRupiah(item.target_amount)}</strong>
+                                Terkumpul: <strong className="text-finance-700 dark:text-finance-300">{formatRupiah(item.current_amount)}</strong> dari{' '}
+                                <strong>{formatRupiah(item.target_amount)}</strong>
                               </p>
-                              {prog.monthlyTarget > 0 && (
-                                <p className="text-[10px] text-teal-600 dark:text-teal-400 font-bold">
-                                  Target: {formatRupiah(prog.monthlyTarget)}/bln (Sisa {prog.remainingMonths} bln)
-                                </p>
-                              )}
                             </div>
                           </div>
 
@@ -458,14 +598,14 @@ export const SavingsTargetModal: React.FC<SavingsTargetModalProps> = ({
                             <button
                               type="button"
                               onClick={() => handleStartEdit(item)}
-                              className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                              className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-finance-600 hover:bg-finance-50"
                             >
                               Edit
                             </button>
                             <button
                               type="button"
                               onClick={() => deleteSavingsTargetItem(item.id)}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50"
                               title="Hapus Pos"
                             >
                               <Trash2 className="w-4 h-4" />

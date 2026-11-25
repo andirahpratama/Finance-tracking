@@ -13,7 +13,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { useFinance } from '../../context/FinanceContext';
-import { calculateGoldValuation } from '../../lib/goldPriceService';
+import { calculateGoldPortfolioWithLots } from '../../lib/goldPriceService';
 import { formatCurrency } from '../../lib/formatters';
 import { BuyGoldModal } from './BuyGoldModal';
 import { SellGoldModal } from './SellGoldModal';
@@ -39,8 +39,15 @@ export const GoldPortfolioDashboard: React.FC = () => {
   const [isManualModalOpen, setIsManualModalOpen] = useState<boolean>(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // We use Antam buyback price as the primary benchmark valuation
-  const valuation = calculateGoldValuation(goldPortfolio, goldPrices.antam.sell);
+  // Per-lot & brand-aware live valuation (Antam lots use Antam buyback, UBS lots use UBS buyback)
+  const lotReport = calculateGoldPortfolioWithLots(goldTransactions, goldPrices);
+  const valuation = {
+    currentValuation: lotReport.totalCurrentValue,
+    floatingProfit: lotReport.totalProfitLoss,
+    roiPercent: lotReport.totalRoi,
+    isProfit: lotReport.isProfit,
+  };
+  const lotMap = new Map(lotReport.lotValuations.map((l) => [l.tx.id, l]));
 
   const formattedUpdateTime = React.useMemo(() => {
     try {
@@ -351,14 +358,16 @@ export const GoldPortfolioDashboard: React.FC = () => {
                   <th className="pb-3">Brand</th>
                   <th className="pb-3 text-right">Gram</th>
                   <th className="pb-3 text-right">Harga / Gram</th>
-                  <th className="pb-3 text-right">Total Nilai</th>
-                  <th className="pb-3 hidden md:table-cell">Catatan</th>
+                  <th className="pb-3 text-right">Total Modal / Jual</th>
+                  <th className="pb-3 text-right">Nilai Saat Ini & P/L</th>
+                  <th className="pb-3 hidden md:table-cell pl-3">Catatan</th>
                   <th className="pb-3 text-center pr-2">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
                 {goldTransactions.map((tx) => {
                   const isBuy = tx.type === 'BUY';
+                  const lot = isBuy ? lotMap.get(tx.id) : undefined;
                   return (
                     <tr
                       key={tx.id}
@@ -386,6 +395,11 @@ export const GoldPortfolioDashboard: React.FC = () => {
 
                       <td className="py-3.5 text-right whitespace-nowrap font-black text-slate-900 dark:text-white">
                         {tx.gram} g
+                        {isBuy && lot && lot.remainingGram < tx.gram && (
+                          <span className="block text-[10px] font-semibold text-slate-400">
+                            sisa {lot.remainingGram} g
+                          </span>
+                        )}
                       </td>
 
                       <td className="py-3.5 text-right whitespace-nowrap text-slate-600 dark:text-slate-300">
@@ -396,7 +410,32 @@ export const GoldPortfolioDashboard: React.FC = () => {
                         {formatCurrency(tx.total_amount)}
                       </td>
 
-                      <td className="py-3.5 hidden md:table-cell text-slate-500 dark:text-slate-400 max-w-xs truncate">
+                      <td className="py-3.5 text-right whitespace-nowrap">
+                        {isBuy && lot ? (
+                          lot.remainingGram > 0 ? (
+                            <div>
+                              <span className="font-bold text-slate-900 dark:text-white block">
+                                {formatCurrency(lot.currentValue)}
+                              </span>
+                              <span
+                                className={`text-[10px] font-black ${
+                                  lot.profitLoss >= 0 ? 'text-finance-600' : 'text-rose-500'
+                                }`}
+                              >
+                                {lot.profitLoss >= 0 ? '+' : ''}
+                                {formatCurrency(lot.profitLoss)} ({lot.roiPercent >= 0 ? '+' : ''}
+                                {lot.roiPercent}%)
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 font-semibold">Sudah terjual</span>
+                          )
+                        ) : (
+                          <span className="text-[10px] text-slate-400">-</span>
+                        )}
+                      </td>
+
+                      <td className="py-3.5 hidden md:table-cell pl-3 text-slate-500 dark:text-slate-400 max-w-xs truncate">
                         {tx.notes || '-'}
                       </td>
 

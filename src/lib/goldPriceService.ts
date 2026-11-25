@@ -1,16 +1,16 @@
 import { GoldPortfolio, GoldPrices, GoldTransaction } from '../types';
 
-// Updated Real-Time Market Reference Today (Senin, 5 Oktober 2026)
-// Antam LM 1g: Jual Rp 2.580.000, Buyback Rp 2.386.000
-// UBS 1g: Jual Rp 2.536.000, Buyback Rp 2.343.000
+// Reference Market Rates (25 Nov 2026)
+// Antam LM 1g: Beli Rp 2.329.000, Buyback Rp 2.190.000
+// UBS 1g: Beli Rp 2.351.000, Buyback Rp 2.166.000
 export const DEFAULT_GOLD_PRICES: GoldPrices = {
   antam: {
-    buy: 2580000,
-    sell: 2386000, // buyback price
+    buy: 2329000,
+    sell: 2190000, // buyback price
   },
   ubs: {
-    buy: 2536000,
-    sell: 2343000, // buyback price
+    buy: 2351000,
+    sell: 2166000, // buyback price
   },
   source: 'mock',
   last_updated: new Date().toISOString(),
@@ -315,6 +315,110 @@ export const calculateGoldPortfolio = (transactions: GoldTransaction[]): GoldPor
     total_gram: Number(totalGram.toFixed(4)),
     total_invested_capital: Math.round(totalInvestedCapital),
     average_buy_price: averageBuyPrice,
+  };
+};
+
+export const getBuybackPriceForBrand = (brand: string, prices: GoldPrices): number => {
+  return brand === 'UBS' ? prices.ubs.sell : prices.antam.sell;
+};
+
+export interface GoldLotValuation {
+  tx: GoldTransaction;
+  remainingGram: number;
+  costBasis: number;
+  currentBuybackPrice: number;
+  currentValue: number;
+  profitLoss: number;
+  roiPercent: number;
+}
+
+/**
+ * Calculates per-lot remaining gram and profit/loss (FIFO per brand)
+ * plus total portfolio valuation across brands using each brand's live buyback price.
+ */
+export const calculateGoldPortfolioWithLots = (
+  transactions: GoldTransaction[],
+  prices: GoldPrices
+) => {
+  const sortedAsc = [...transactions].sort(
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+  );
+
+  // Track buy lots with remaining grams
+  const lots: {
+    tx: GoldTransaction;
+    remainingGram: number;
+  }[] = [];
+
+  sortedAsc.forEach((tx) => {
+    const gram = Number(tx.gram) || 0;
+    if (tx.type === 'BUY') {
+      lots.push({ tx, remainingGram: gram });
+    } else if (tx.type === 'SELL') {
+      let toDeduct = gram;
+      // First deduct from matching brand lots FIFO
+      for (const lot of lots) {
+        if (toDeduct <= 0) break;
+        if (lot.tx.brand === tx.brand && lot.remainingGram > 0) {
+          const take = Math.min(lot.remainingGram, toDeduct);
+          lot.remainingGram = Number((lot.remainingGram - take).toFixed(4));
+          toDeduct = Number((toDeduct - take).toFixed(4));
+        }
+      }
+      // Fallback: if sold brand had less than sold gram, deduct FIFO from remaining lots
+      if (toDeduct > 0) {
+        for (const lot of lots) {
+          if (toDeduct <= 0) break;
+          if (lot.remainingGram > 0) {
+            const take = Math.min(lot.remainingGram, toDeduct);
+            lot.remainingGram = Number((lot.remainingGram - take).toFixed(4));
+            toDeduct = Number((toDeduct - take).toFixed(4));
+          }
+        }
+      }
+    }
+  });
+
+  const lotValuations: GoldLotValuation[] = lots.map((lot) => {
+    const origGram = Number(lot.tx.gram) || 0;
+    const pricePerGram = Number(lot.tx.price_per_gram) || 0;
+    const costBasis = Math.round(lot.remainingGram * pricePerGram);
+    const buyback = getBuybackPriceForBrand(lot.tx.brand, prices);
+    const currentValue = Math.round(lot.remainingGram * buyback);
+    const profitLoss = currentValue - costBasis;
+    const roiPercent = costBasis > 0 ? Number(((profitLoss / costBasis) * 100).toFixed(2)) : 0;
+
+    return {
+      tx: lot.tx,
+      remainingGram: lot.remainingGram,
+      costBasis: lot.remainingGram > 0 ? costBasis : Number(lot.tx.total_amount) || Math.round(origGram * pricePerGram),
+      currentBuybackPrice: buyback,
+      currentValue,
+      profitLoss,
+      roiPercent,
+    };
+  });
+
+  const totalGram = Number(
+    lotValuations.reduce((s, l) => s + l.remainingGram, 0).toFixed(4)
+  );
+  const totalCapital = lotValuations.reduce(
+    (s, l) => s + (l.remainingGram > 0 ? l.costBasis : 0),
+    0
+  );
+  const totalCurrentValue = lotValuations.reduce((s, l) => s + l.currentValue, 0);
+  const totalProfitLoss = totalCurrentValue - totalCapital;
+  const totalRoi =
+    totalCapital > 0 ? Number(((totalProfitLoss / totalCapital) * 100).toFixed(2)) : 0;
+
+  return {
+    lotValuations: lotValuations.reverse(), // newest first for display
+    totalGram,
+    totalCapital,
+    totalCurrentValue,
+    totalProfitLoss,
+    totalRoi,
+    isProfit: totalProfitLoss >= 0,
   };
 };
 

@@ -1,39 +1,50 @@
-import { Category, Transaction } from '../types';
+import { Category, IndonesianBank, Transaction } from '../types';
+
+export const INDONESIAN_BANKS: { id: IndonesianBank; name: string; color: string; short: string }[] = [
+  { id: 'BCA', name: 'BCA', color: '#005FAF', short: 'BCA' },
+  { id: 'Mandiri', name: 'Bank Mandiri', color: '#003D79', short: 'MDR' },
+  { id: 'BRI', name: 'BRI', color: '#00529C', short: 'BRI' },
+  { id: 'BNI', name: 'BNI', color: '#F15A23', short: 'BNI' },
+  { id: 'CIMB Niaga', name: 'CIMB Niaga', color: '#790008', short: 'CIMB' },
+  { id: 'Danamon', name: 'Bank Danamon', color: '#F37021', short: 'BDMN' },
+  { id: 'Permata', name: 'PermataBank', color: '#007C5A', short: 'PRMT' },
+  { id: 'BTN', name: 'BTN', color: '#004A8F', short: 'BTN' },
+  { id: 'BSI', name: 'Bank Syariah Indonesia (BSI)', color: '#00A39D', short: 'BSI' },
+  { id: 'Jenius', name: 'Jenius (SMBC)', color: '#00A8E8', short: 'JNS' },
+  { id: 'Blu', name: 'blu by BCA Digital', color: '#0095D9', short: 'blu' },
+  { id: 'SeaBank', name: 'SeaBank', color: '#EE4D2D', short: 'SEA' },
+  { id: 'Bank Jago', name: 'Bank Jago', color: '#F7A800', short: 'JAGO' },
+  { id: 'OCBC', name: 'OCBC', color: '#D71920', short: 'OCBC' },
+  { id: 'Maybank', name: 'Maybank', color: '#FFC600', short: 'MYB' },
+];
 
 export const DEFAULT_INCOME_CATEGORIES: Omit<Category, 'id'>[] = [
   {
     name: 'Gaji Suami',
     type: 'income',
     icon: 'Wallet',
-    color: '#10B981', // Emerald
+    color: '#4a8c67', // Sage Green
     is_default: true,
   },
   {
     name: 'Gaji Istri',
     type: 'income',
     icon: 'Briefcase',
-    color: '#06B6D4', // Cyan
+    color: '#0d9488', // Teal
     is_default: true,
   },
   {
     name: 'Bisnis',
     type: 'income',
     icon: 'TrendingUp',
-    color: '#8B5CF6', // Purple
+    color: '#6366f1', // Indigo
     is_default: true,
   },
   {
     name: 'Investasi',
     type: 'income',
     icon: 'LineChart',
-    color: '#F59E0B', // Amber
-    is_default: true,
-  },
-  {
-    name: 'Tabungan',
-    type: 'income',
-    icon: 'PiggyBank',
-    color: '#06B6D4', // Cyan
+    color: '#d49a22', // Gold
     is_default: true,
   },
 ];
@@ -82,27 +93,26 @@ export const DEFAULT_EXPENSE_CATEGORIES: Omit<Category, 'id'>[] = [
     is_default: true,
   },
   {
-    name: 'Tabungan',
+    name: 'Ghaib',
     type: 'expense',
-    icon: 'PiggyBank',
-    color: '#06B6D4', // Cyan
+    icon: 'Sparkles',
+    color: '#64748B', // Slate — kategori cepat untuk catatan terlewat
     is_default: true,
   },
 ];
 
 export const INITIAL_CATEGORIES: Category[] = [
-  { id: 'cat-inc-1', name: 'Gaji Suami', type: 'income', icon: 'Wallet', color: '#10B981', is_default: true },
-  { id: 'cat-inc-2', name: 'Gaji Istri', type: 'income', icon: 'Briefcase', color: '#06B6D4', is_default: true },
-  { id: 'cat-inc-3', name: 'Bisnis', type: 'income', icon: 'TrendingUp', color: '#8B5CF6', is_default: true },
-  { id: 'cat-inc-4', name: 'Investasi', type: 'income', icon: 'LineChart', color: '#F59E0B', is_default: true },
-  { id: 'cat-inc-sav', name: 'Tabungan', type: 'income', icon: 'PiggyBank', color: '#06B6D4', is_default: true },
+  { id: 'cat-inc-1', name: 'Gaji Suami', type: 'income', icon: 'Wallet', color: '#4a8c67', is_default: true },
+  { id: 'cat-inc-2', name: 'Gaji Istri', type: 'income', icon: 'Briefcase', color: '#0d9488', is_default: true },
+  { id: 'cat-inc-3', name: 'Bisnis', type: 'income', icon: 'TrendingUp', color: '#6366f1', is_default: true },
+  { id: 'cat-inc-4', name: 'Investasi', type: 'income', icon: 'LineChart', color: '#d49a22', is_default: true },
   { id: 'cat-exp-1', name: 'Belanja Makanan', type: 'expense', icon: 'Utensils', color: '#EF4444', is_default: true },
   { id: 'cat-exp-2', name: 'Belanja Kebutuhan Harian', type: 'expense', icon: 'ShoppingCart', color: '#F97316', is_default: true },
   { id: 'cat-exp-3', name: 'Transportasi', type: 'expense', icon: 'Car', color: '#3B82F6', is_default: true },
   { id: 'cat-exp-4', name: 'Jajan Anak', type: 'expense', icon: 'Baby', color: '#EC4899', is_default: true },
   { id: 'cat-exp-5', name: 'Jajan Orang Tua', type: 'expense', icon: 'Coffee', color: '#A855F7', is_default: true },
   { id: 'cat-exp-6', name: 'Sekolah Anak', type: 'expense', icon: 'GraduationCap', color: '#14B8A6', is_default: true },
-  { id: 'cat-exp-sav', name: 'Tabungan', type: 'expense', icon: 'PiggyBank', color: '#06B6D4', is_default: true },
+  { id: 'cat-exp-7', name: 'Ghaib', type: 'expense', icon: 'Sparkles', color: '#64748B', is_default: true },
 ];
 
 export const AVAILABLE_ICONS = [

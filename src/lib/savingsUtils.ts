@@ -1,4 +1,4 @@
-import { SavingsTargetItem, Transaction } from '../types';
+import { SavingsTargetItem, Transaction, TransferNodeType } from '../types';
 
 export interface SavingsProgressCalculation {
   monthlyTarget: number;
@@ -10,21 +10,71 @@ export interface SavingsProgressCalculation {
   expectedAmountToDate: number;
 }
 
+export interface ParsedTransferMeta {
+  fromType: TransferNodeType;
+  fromId: string;
+  fromLabel: string;
+  toType: TransferNodeType;
+  toId: string;
+  toLabel: string;
+}
+
+export const buildTransferMetaTag = (meta: ParsedTransferMeta): string => {
+  const payload = [
+    meta.fromType,
+    meta.fromId,
+    encodeURIComponent(meta.fromLabel),
+    meta.toType,
+    meta.toId,
+    encodeURIComponent(meta.toLabel),
+  ].join('|');
+  return `(transfer_meta:${payload})`;
+};
+
+export const parseTransferMeta = (notes?: string): ParsedTransferMeta | null => {
+  if (!notes) return null;
+  const match = notes.match(/\(transfer_meta:([^)]+)\)/i);
+  if (!match) return null;
+  const parts = match[1].split('|');
+  if (parts.length < 6) return null;
+  return {
+    fromType: parts[0] as TransferNodeType,
+    fromId: parts[1],
+    fromLabel: decodeURIComponent(parts[2] || ''),
+    toType: parts[3] as TransferNodeType,
+    toId: parts[4],
+    toLabel: decodeURIComponent(parts[5] || ''),
+  };
+};
+
 /**
- * Checks if a transaction is an internal transfer between cash wallet and savings
+ * Checks if a transaction is an internal transfer (between wallet, budget posts, or savings)
+ * and therefore NOT counted as regular income/expense and NOT tagged with a category label.
  */
 export const isSavingsTransaction = (t: Transaction): boolean => {
   if (t.is_savings_transfer === true) return true;
   if (t.notes && (
     t.notes.includes('sav_target:') ||
+    t.notes.includes('transfer_meta:') ||
+    t.notes.includes('[Transfer Kas:') ||
     t.notes.includes('[Setor Ke Tabungan') ||
     t.notes.includes('[Tarik Dari Tabungan') ||
     t.notes.includes('Transfer Ke Tabungan') ||
-    t.notes.includes('Tarik Tabungan')
+    t.notes.includes('Tarik Tabungan') ||
+    t.notes.toLowerCase().includes('setor tabungan') ||
+    t.notes.toLowerCase().includes('tarik tabungan')
   )) {
     return true;
   }
   return false;
+};
+
+/**
+ * Checks if a transaction is specifically a transfer involving a savings target or budget pos
+ * (including legacy transactions that accidentally had a category like 'Gaji Istri' / 'Sekolah Anak' attached).
+ */
+export const isTransferTransaction = (t: Transaction): boolean => {
+  return isSavingsTransaction(t);
 };
 
 /**

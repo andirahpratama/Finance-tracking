@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Printer } from 'lucide-react';
 import { useFinance } from '../../context/FinanceContext';
 import { printFinancialReport } from '../../lib/exportUtils';
+import { isSavingsTransaction } from '../../lib/savingsUtils';
+import { getMonthKey } from '../../lib/budgetUtils';
 import { Transaction } from '../../types';
 
 interface PrintReportModalProps {
@@ -13,7 +15,13 @@ interface PrintReportModalProps {
 type ReportPeriodType = 'daily' | 'this_month' | 'specific_month' | 'yearly' | 'all';
 
 export const PrintReportModal: React.FC<PrintReportModalProps> = ({ isOpen, onClose }) => {
-  const { transactions, availableYears } = useFinance();
+  const {
+    transactions,
+    availableYears,
+    savingsTargets,
+    getBudgetStatusForMonth,
+    getVerdictForMonth,
+  } = useFinance();
 
   const now = new Date();
   const currentYear = now.getFullYear();
@@ -76,9 +84,17 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({ isOpen, onCl
     let inc = 0;
     let exp = 0;
     filtered.forEach((t) => {
+      if (isSavingsTransaction(t)) return;
       if (t.type === 'income') inc += Number(t.amount);
       else exp += Number(t.amount);
     });
+
+    const targetMonthKey =
+      periodType === 'this_month'
+        ? getMonthKey(now.getFullYear(), now.getMonth())
+        : periodType === 'specific_month'
+        ? getMonthKey(selectedYear, selectedMonthIndex)
+        : getMonthKey(now.getFullYear(), now.getMonth());
 
     printFinancialReport(filtered, {
       totalIncome: inc,
@@ -89,6 +105,9 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({ isOpen, onCl
       year: selectedYear,
       monthIndex: selectedMonthIndex,
       day: selectedDay,
+      budgetStatus: periodType === 'this_month' || periodType === 'specific_month' ? getBudgetStatusForMonth(targetMonthKey) : undefined,
+      verdict: periodType === 'this_month' || periodType === 'specific_month' ? getVerdictForMonth(targetMonthKey) : undefined,
+      savingsTargets,
     });
 
     onClose();

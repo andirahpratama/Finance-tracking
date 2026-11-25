@@ -1,5 +1,7 @@
-import { Transaction } from '../types';
+import { FinancialVerdict, SavingsTargetItem, Transaction } from '../types';
+import { MonthlyBudgetStatus } from './budgetUtils';
 import { formatDateIndo, formatRupiah, formatCompactRupiah, formatNotesForDisplay } from './formatters';
+import { isSavingsTransaction } from './savingsUtils';
 
 export const exportTransactionsToCSV = (transactions: Transaction[], filename = 'laporan-keuangan.csv') => {
   if (!transactions.length) {
@@ -8,13 +10,16 @@ export const exportTransactionsToCSV = (transactions: Transaction[], filename = 
   }
 
   const headers = ['Tanggal', 'Tipe', 'Kategori', 'Jumlah (Rp)', 'Catatan'];
-  const rows = transactions.map((t) => [
-    `"${formatDateIndo(t.date)}"`,
-    `"${t.type === 'income' ? 'Pemasukan' : 'Pengeluaran'}"`,
-    `"${t.category_name || '-'}"`,
-    `"${t.amount}"`,
-    `"${(formatNotesForDisplay(t.notes) || '-').replace(/"/g, '""')}"`,
-  ]);
+  const rows = transactions.map((t) => {
+    const isTransfer = isSavingsTransaction(t);
+    return [
+      `"${formatDateIndo(t.date)}"`,
+      `"${isTransfer ? 'Transfer Kas' : t.type === 'income' ? 'Pemasukan' : 'Pengeluaran'}"`,
+      `"${isTransfer ? '-' : (t.category_name || '-')}"`,
+      `"${t.amount}"`,
+      `"${(formatNotesForDisplay(t.notes) || '-').replace(/"/g, '""')}"`,
+    ];
+  });
 
   const csvContent = [
     headers.join(','),
@@ -41,6 +46,9 @@ export interface PrintReportStats {
   year?: number;
   monthIndex?: number;
   day?: number;
+  budgetStatus?: MonthlyBudgetStatus;
+  verdict?: FinancialVerdict;
+  savingsTargets?: SavingsTargetItem[];
 }
 
 export const printFinancialReport = (
@@ -58,17 +66,18 @@ export const printFinancialReport = (
   const monthIndex = stats.monthIndex ?? new Date().getMonth();
   const day = stats.day ?? new Date().getDate();
 
-  // Calculate Category Breakdowns
+  // Calculate Category Breakdowns (excluding Transfer Kas)
   const categoryMap: { [key: string]: { name: string; type: string; total: number; color: string } } = {};
 
   transactions.forEach((t) => {
+    if (isSavingsTransaction(t)) return;
     const key = `${t.type}_${t.category_name || 'Lainnya'}`;
     if (!categoryMap[key]) {
       categoryMap[key] = {
         name: t.category_name || 'Lainnya',
         type: t.type,
         total: 0,
-        color: t.category_color || (t.type === 'income' ? '#10b981' : '#f43f5e'),
+        color: t.category_color || (t.type === 'income' ? '#4a8c67' : '#f43f5e'),
       };
     }
     categoryMap[key].total += Number(t.amount) || 0;
@@ -78,8 +87,87 @@ export const printFinancialReport = (
   const expenseCategories = categoryList.filter((c) => c.type === 'expense');
   const incomeCategories = categoryList.filter((c) => c.type === 'income');
 
-  // Generate SVG Cashflow Bar Chart
-  const svgChartHTML = generateCashflowSVG(periodType, transactions, year, monthIndex, day);
+  const svgChartHTML = generateCashflowSVG(periodType, transactions.filter((t) => !isSavingsTransaction(t)), year, monthIndex, day);
+
+  const verdictHTML = stats.verdict
+    ? `
+      <div class="section-title">Verdict Perencanaan Keuangan & Jejak Uang</div>
+      <div class="card" style="margin-bottom:20px; background:#f2f8f4; border-color:#c3dfcd;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <strong style="font-size:15px;">Status: ${stats.verdict.level} — ${stats.verdict.headline}</strong>
+          <span style="font-size:12px; font-weight:700;">Tabungan Bulan Ini: ${formatRupiah(stats.verdict.moneyTrail.savedThisMonth)}</span>
+        </div>
+        <ul style="margin:0; padding-left:18px; font-size:12px; color:#334155;">
+          ${stats.verdict.reasons.map((r) => `<li>${r}</li>`).join('')}
+        </ul>
+      </div>
+    `
+    : '';
+
+  const budgetHTML =
+    stats.budgetStatus && stats.budgetStatus.posts.length > 0
+      ? `
+      <div class="section-title">Ringkasan Masuk / Keluar per Pos Budgeting</div>
+      <table style="margin-bottom:20px;">
+        <thead>
+          <tr>
+            <th>Nama Pos</th>
+            <th style="text-align:right;">Anggaran</th>
+            <th style="text-align:right;">Terpakai</th>
+            <th style="text-align:right;">Sisa</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${stats.budgetStatus.posts
+            .map(
+              (p) => `
+            <tr>
+              <td><strong>${p.post.name}</strong> (${p.post.percent}%)</td>
+              <td style="text-align:right;">${formatRupiah(p.effectiveBudget)}</td>
+              <td style="text-align:right;">${formatRupiah(p.spent)} (${p.percentUsed}%)</td>
+              <td style="text-align:right; font-weight:700; color:${p.remaining >= 0 ? '#397052' : '#e11d48'};">${formatRupiah(p.remaining)}</td>
+            </tr>
+          `
+            )
+            .join('')}
+        </tbody>
+      </table>
+    `
+      : '';
+
+  const savingsHTML =
+    stats.savingsTargets && stats.savingsTargets.length > 0
+      ? `
+      <div class="section-title">Status Pos Tabungan Keluarga</div>
+      <table style="margin-bottom:20px;">
+        <thead>
+          <tr>
+            <th>Pos Tabungan</th>
+            <th>Bank</th>
+            <th style="text-align:right;">Saldo Saat Ini</th>
+            <th style="text-align:right;">Target</th>
+            <th style="text-align:right;">Progres</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${stats.savingsTargets
+            .map((s) => {
+              const pct = s.target_amount > 0 ? Math.min(100, Math.round(((s.current_amount || 0) / s.target_amount) * 100)) : 0;
+              return `
+              <tr>
+                <td><strong>${s.name}</strong></td>
+                <td>${s.bank_name || '-'}</td>
+                <td style="text-align:right; font-weight:700; color:#397052;">${formatRupiah(s.current_amount || 0)}</td>
+                <td style="text-align:right;">${formatRupiah(s.target_amount)}</td>
+                <td style="text-align:right; font-weight:700;">${pct}%</td>
+              </tr>
+            `;
+            })
+            .join('')}
+        </tbody>
+      </table>
+    `
+      : '';
 
   const html = `
     <!DOCTYPE html>
@@ -152,6 +240,10 @@ export const printFinancialReport = (
           <p class="expense">${formatRupiah(stats.totalExpense)}</p>
         </div>
       </div>
+
+      ${verdictHTML}
+      ${budgetHTML}
+      ${savingsHTML}
 
       <!-- Section 1: Visualisasi Grafik Arus Kas -->
       <div class="section-title">Grafik Visualisasi Arus Kas (${periodType === 'daily' ? 'Harian' : periodType === 'yearly' ? 'Tahunan' : 'Bulanan'})</div>
@@ -227,19 +319,22 @@ export const printFinancialReport = (
         </thead>
         <tbody>
           ${transactions.length === 0 ? '<tr><td colspan="5" style="text-align:center; color:#94a3b8;">Tidak ada catatan transaksi pada periode ini.</td></tr>' : ''}
-          ${transactions.map(t => `
+          ${transactions.map(t => {
+            const isTransfer = isSavingsTransaction(t);
+            return `
             <tr>
               <td>${formatDateIndo(t.date)}</td>
-              <td class="${t.type === 'income' ? 'badge-income' : 'badge-expense'}">
-                ${t.type === 'income' ? 'Pemasukan' : 'Pengeluaran'}
+              <td class="${isTransfer ? '' : t.type === 'income' ? 'badge-income' : 'badge-expense'}">
+                ${isTransfer ? 'Transfer Kas' : t.type === 'income' ? 'Pemasukan' : 'Pengeluaran'}
               </td>
-              <td>${t.category_name || '-'}</td>
+              <td>${isTransfer ? '-' : (t.category_name || '-')}</td>
               <td>${formatNotesForDisplay(t.notes) || '-'}</td>
-              <td style="text-align: right; font-weight: 700;" class="${t.type === 'income' ? 'badge-income' : 'badge-expense'}">
-                ${t.type === 'income' ? '+' : '-'}${formatRupiah(t.amount)}
+              <td style="text-align: right; font-weight: 700;" class="${isTransfer ? '' : t.type === 'income' ? 'badge-income' : 'badge-expense'}">
+                ${isTransfer ? '' : t.type === 'income' ? '+' : '-'}${formatRupiah(t.amount)}
               </td>
             </tr>
-          `).join('')}
+          `;
+          }).join('')}
         </tbody>
       </table>
 

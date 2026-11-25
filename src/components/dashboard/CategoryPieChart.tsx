@@ -13,8 +13,8 @@ export type ViewType = 'all' | 'expense' | 'income';
 export type PeriodType = 'this_month' | 'all';
 
 export const CategoryPieChart: React.FC<CategoryPieChartProps> = ({ transactions }) => {
-  // Default to 'all' (Semua) as requested by user
-  const [activeType, setActiveType] = useState<ViewType>('all');
+  // Default to 'expense' so expense donut shows TOTAL PENGELUARAN and % dari Pengeluaran
+  const [activeType, setActiveType] = useState<ViewType>('expense');
   const [periodFilter, setPeriodFilter] = useState<PeriodType>('this_month');
 
   // Filter transactions based on periodFilter (excluding internal savings transfers)
@@ -129,7 +129,12 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = ({ transactions
           </div>
           <p className="text-sm font-black text-white">{formatRupiah(item.value)}</p>
           <p className="text-[11px] text-slate-300 font-semibold">
-            {percentage}% dari {centerTitle}
+            {percentage}% dari{' '}
+            {activeType === 'expense'
+              ? 'Pengeluaran'
+              : activeType === 'income'
+              ? 'Pemasukan'
+              : 'Pemasukan'}
           </p>
         </div>
       );
@@ -285,7 +290,12 @@ export const CategoryPieChart: React.FC<CategoryPieChartProps> = ({ transactions
                       {formatRupiah(item.value)}
                     </span>
                     <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">
-                      {pct}% dari {activeType === 'all' ? 'Pemasukan' : 'Total'}
+                      {pct}% dari{' '}
+                      {activeType === 'expense'
+                        ? 'Pengeluaran'
+                        : activeType === 'income'
+                        ? 'Pemasukan'
+                        : 'Pemasukan'}
                     </span>
                   </div>
                 </div>

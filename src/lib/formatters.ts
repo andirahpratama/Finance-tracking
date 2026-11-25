@@ -112,8 +112,19 @@ export const getTodayDateInput = (): string => {
 export const formatNotesForDisplay = (rawNotes?: string): string => {
   if (!rawNotes) return '';
 
-  // Strip internal metadata tag (sav_target:...)
-  let clean = rawNotes.replace(/\(sav_target:[^)]+\)/gi, '').trim();
+  // Strip internal metadata tags
+  let clean = rawNotes
+    .replace(/\(sav_target:[^)]+\)/gi, '')
+    .replace(/\(transfer_meta:[^)]+\)/gi, '')
+    .trim();
+
+  // Match pattern: [Transfer Kas: Dari X -> Ke Y] UserNote
+  const transferMatch = clean.match(/^\[Transfer Kas:\s*([^\]]+)\]\s*(.*)$/i);
+  if (transferMatch) {
+    const route = transferMatch[1].trim();
+    const extraNotes = transferMatch[2].replace(/^[•\s\-\:]+/, '').trim();
+    return extraNotes ? `${route} • ${extraNotes}` : route;
+  }
 
   // Match pattern: [Setor Ke/Tarik Dari Tabungan: TargetName] UserNote
   const bracketMatch = clean.match(/^\[(Setor Ke|Tarik Dari)(?: Tabungan)?:?\s*([^\]]+)\]\s*(.*)$/i);
