@@ -163,6 +163,8 @@ export type InputModalTab = 'expense' | 'income' | 'savings';
 export type SavingsActionType = 'deposit' | 'withdraw';
 
 // ==================== BUDGETING & TRANSFER TYPES ====================
+export type BudgetingMode = 'simple' | 'complete';
+
 export type BudgetPostKind = 'expense' | 'savings' | 'investment' | 'custom';
 
 export interface BudgetPost {
@@ -174,10 +176,44 @@ export interface BudgetPost {
   color?: string;
 }
 
+export interface SimpleBudgetConfig {
+  effectiveFrom: string; // YYYY-MM (berlaku ke depan saja)
+  monthlyBudget: number; // Budget bulanan tetap (tidak pernah naik otomatis)
+  investPercent: number; // % dari sisa (Pemasukan - Budget)
+  savingsPercent: number; // 100 - investPercent
+  updatedAt: string;
+}
+
 export interface MonthlyBudgetConfig {
   effectiveFrom: string; // YYYY-MM (berlaku ke depan saja mulai bulan ini)
   monthlyIncome: number;
   posts: BudgetPost[];
+  updatedAt: string;
+}
+
+export interface BudgetModeActivation {
+  effectiveFrom: string; // YYYY-MM (berlaku ke depan saja)
+  mode: BudgetingMode;
+  updatedAt: string;
+}
+
+export interface UserServerState {
+  version: number;
+  budgetMode: BudgetingMode | null;
+  needsModeConfirmation?: boolean;
+  budgetModeHistory: BudgetModeActivation[];
+  simpleBudgetConfigs: SimpleBudgetConfig[];
+  budgetConfigs: MonthlyBudgetConfig[];
+  postSettlements: MonthPostSettlement[];
+  savingsTargets: SavingsTargetItem[];
+  debts: DebtItem[];
+  manualInvestments: ManualInvestment[];
+  classInvestments: ClassInvestment[];
+  goldTransactions: GoldTransaction[];
+  emergencyFundPref: EmergencyFundPreference | null;
+  balanceThresholds?: BalanceThresholds;
+  monthlySavingsTarget?: number;
+  appCurrency?: CurrencyCode;
   updatedAt: string;
 }
 

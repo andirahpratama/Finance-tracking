@@ -1,4 +1,6 @@
 import {
+  BudgetingMode,
+  BudgetModeActivation,
   BudgetPost,
   BudgetPostKind,
   FinancialVerdict,
@@ -7,10 +9,14 @@ import {
   MonthlyBudgetConfig,
   MonthPostSettlement,
   SavingsTargetItem,
+  SimpleBudgetConfig,
   Transaction,
 } from '../types';
 import { formatRupiah } from './formatters';
 import { isSavingsTransaction, parseTransferMeta } from './savingsUtils';
+
+export const FIXED_BUDGET_RULE_TEXT =
+  'Budget bulanan hanya berubah bila kamu mengubahnya sendiri. Pemasukan naik tidak pernah menaikkan budget otomatis.';
 
 export const getMonthKey = (year: number, monthIndex: number): string => {
   return `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
@@ -48,7 +54,13 @@ export const detectPostKind = (name: string): BudgetPostKind => {
   if (lower.includes('invest') || lower.includes('emas') || lower.includes('saham')) {
     return 'investment';
   }
-  if (lower.includes('biaya') || lower.includes('bulanan') || lower.includes('kebutuhan') || lower.includes('belanja') || lower.includes('hidup')) {
+  if (
+    lower.includes('biaya') ||
+    lower.includes('bulanan') ||
+    lower.includes('kebutuhan') ||
+    lower.includes('belanja') ||
+    lower.includes('hidup')
+  ) {
     return 'expense';
   }
   return 'custom';
@@ -85,14 +97,44 @@ export const createSuggestedBudgetPosts = (monthlyIncome: number): BudgetPost[] 
 };
 
 /**
- * Forward-only budget config resolution:
- * Finds the most recent config where config.effectiveFrom <= targetMonthKey.
- * Saving a config in month M sets effectiveFrom = M so months < M are NEVER altered.
+ * Forward-only budget mode resolution for a given monthKey.
+ */
+export const getBudgetModeForMonth = (
+  modeHistory: BudgetModeActivation[],
+  fallbackMode: BudgetingMode | null,
+  targetMonthKey: string
+): BudgetingMode | null => {
+  if (modeHistory && modeHistory.length > 0) {
+    const applicable = modeHistory
+      .filter((m) => m.effectiveFrom <= targetMonthKey)
+      .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom));
+    if (applicable[0]) return applicable[0].mode;
+    return null;
+  }
+  return fallbackMode;
+};
+
+/**
+ * Forward-only Complete Mode config resolution.
  */
 export const getBudgetConfigForMonth = (
   configs: MonthlyBudgetConfig[],
   targetMonthKey: string
 ): MonthlyBudgetConfig | null => {
+  if (!configs || configs.length === 0) return null;
+  const applicable = configs
+    .filter((c) => c.effectiveFrom <= targetMonthKey)
+    .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom));
+  return applicable[0] || null;
+};
+
+/**
+ * Forward-only Simple Mode config resolution.
+ */
+export const getSimpleBudgetConfigForMonth = (
+  configs: SimpleBudgetConfig[],
+  targetMonthKey: string
+): SimpleBudgetConfig | null => {
   if (!configs || configs.length === 0) return null;
   const applicable = configs
     .filter((c) => c.effectiveFrom <= targetMonthKey)
@@ -123,13 +165,51 @@ export interface MonthlyExpenseCategoryBreakdown {
   percentOfExpense: number;
 }
 
+export interface SimpleModeSummary {
+  monthlyBudget: number; // Tetap (tidak pernah naik otomatis karena pemasukan naik)
+  rolloverIn: number;
+  transferIn: number;
+  effectiveBudget: number;
+  spent: number;
+  budgetRemaining: number;
+  percentUsed: number;
+  isOverBudget: boolean;
+  recordedIncome: number;
+  sisaPemasukan: number; // Pemasukan - Budget Bulanan
+  investPercent: number;
+  savingsPercent: number;
+  plannedInvestAmount: number;
+  plannedSavingsAmount: number;
+  investRealized: number;
+  savingsRealized: number;
+  noSisaWarning: boolean; // true jika Pemasukan <= Budget Bulanan
+  settlement?: MonthPostSettlement;
+}
+
+export interface ExtraIncomeAllocation {
+  extraAmount: number; // max(0, actualIncome - plannedIncome)
+  toInvestment: number;
+  toSavings: number;
+  unallocated: number;
+  hasInvestmentPost: boolean;
+  hasSavingsPost: boolean;
+  investmentPostName?: string;
+  savingsPostName?: string;
+}
+
 export interface MonthlyBudgetStatus {
   monthKey: string;
+  mode: BudgetingMode | null;
   config: MonthlyBudgetConfig | null;
+  simpleConfig: SimpleBudgetConfig | null;
+  simpleSummary: SimpleModeSummary | null;
+  extraIncomeAllocation: ExtraIncomeAllocation | null;
   plannedIncome: number;
   actualIncome: number;
   actualExpense: number;
   actualNetSavingsDeposit: number;
+  actualSavingsDepositGross: number;
+  actualInvestmentSpent: number;
   posts: PostUsageSummary[];
   primaryExpensePost: PostUsageSummary | null;
   expenseCategories: MonthlyExpenseCategoryBreakdown[];
@@ -142,22 +222,42 @@ const getTxMonthKey = (dateStr: string): string => {
 
 export const calculateMonthlyBudgetStatus = ({
   monthKey,
+  modeHistory = [],
+  activeMode = null,
   configs,
+  simpleConfigs = [],
   settlements,
   transactions,
   goldTransactions = [],
   manualInvestments = [],
 }: {
   monthKey: string;
+  modeHistory?: BudgetModeActivation[];
+  activeMode?: BudgetingMode | null;
   configs: MonthlyBudgetConfig[];
+  simpleConfigs?: SimpleBudgetConfig[];
   settlements: MonthPostSettlement[];
   transactions: Transaction[];
   goldTransactions?: GoldTransaction[];
   manualInvestments?: ManualInvestment[];
 }): MonthlyBudgetStatus => {
-  const config = getBudgetConfigForMonth(configs, monthKey);
-  const prevMonthKey = getPreviousMonthKey(monthKey);
+  const completeConfig = getBudgetConfigForMonth(configs, monthKey);
+  const simpleConfig = getSimpleBudgetConfigForMonth(simpleConfigs, monthKey);
 
+  let resolvedMode = getBudgetModeForMonth(modeHistory, activeMode, monthKey);
+  if (!resolvedMode) {
+    // Fallback if config exists for that month without modeHistory entry
+    if (simpleConfig && !completeConfig) resolvedMode = 'simple';
+    else if (completeConfig) resolvedMode = 'complete';
+  }
+  // Ensure resolvedMode actually has a config for this month, otherwise fallback to whichever exists
+  if (resolvedMode === 'simple' && !simpleConfig && completeConfig) {
+    resolvedMode = 'complete';
+  } else if (resolvedMode === 'complete' && !completeConfig && simpleConfig) {
+    resolvedMode = 'simple';
+  }
+
+  const prevMonthKey = getPreviousMonthKey(monthKey);
   const monthTxs = transactions.filter((t) => getTxMonthKey(t.date) === monthKey);
 
   let actualIncome = 0;
@@ -166,8 +266,6 @@ export const calculateMonthlyBudgetStatus = ({
   let savingsWithdraw = 0;
 
   const categoryTotals = new Map<string, MonthlyExpenseCategoryBreakdown>();
-
-  // Track transfers per budget post ID or name
   const transferInMap = new Map<string, number>();
   const transferOutMap = new Map<string, number>();
 
@@ -230,7 +328,6 @@ export const calculateMonthlyBudgetStatus = ({
       percentOfExpense: actualExpense > 0 ? Number(((c.total / actualExpense) * 100).toFixed(1)) : 0,
     }));
 
-  // Investment spending this month (gold buys + manual investments purchased this month)
   const goldBoughtThisMonth = goldTransactions
     .filter((g) => g.type === 'BUY' && getTxMonthKey(g.date) === monthKey)
     .reduce((s, g) => s + (Number(g.total_amount) || 0), 0);
@@ -242,20 +339,64 @@ export const calculateMonthlyBudgetStatus = ({
   const totalInvestmentSpentThisMonth = goldBoughtThisMonth + manualInvestThisMonth;
   const actualNetSavingsDeposit = Math.max(0, savingsDeposit - savingsWithdraw);
 
-  const postsList: BudgetPost[] = config?.posts || [];
-  // Identify primary expense post (first post with kind === 'expense', or first post matching 'biaya')
+  // ==================== MODE SEDERHANA ====================
+  let simpleSummary: SimpleModeSummary | null = null;
+  if (resolvedMode === 'simple' && simpleConfig) {
+    const monthlyBudget = Number(simpleConfig.monthlyBudget) || 0;
+    const rolloverIn = settlements
+      .filter((s) => s.monthKey === prevMonthKey && s.action === 'rollover' && s.postId === 'simple-budget')
+      .reduce((sum, s) => sum + s.amount, 0);
+    const transferIn = transferInMap.get('simple-budget') || 0;
+    const effectiveBudget = Math.max(0, monthlyBudget + rolloverIn + transferIn);
+    const budgetRemaining = effectiveBudget - actualExpense;
+    const percentUsed = effectiveBudget > 0 ? Math.round((actualExpense / effectiveBudget) * 100) : 0;
+
+    // Sisa = Pemasukan - Budget Bulanan (Budget tetap, tidak pernah naik otomatis!)
+    const rawSisa = actualIncome - monthlyBudget;
+    const sisaPemasukan = Math.max(0, rawSisa);
+    const investPct = Number(simpleConfig.investPercent) || 0;
+    const savingsPct = Number(simpleConfig.savingsPercent) || 0;
+    const plannedInvestAmount = sisaPemasukan > 0 ? Math.round((sisaPemasukan * investPct) / 100) : 0;
+    const plannedSavingsAmount = sisaPemasukan > 0 ? Math.max(0, sisaPemasukan - plannedInvestAmount) : 0;
+
+    const settlement = settlements.find((s) => s.monthKey === monthKey && s.postId === 'simple-budget');
+
+    simpleSummary = {
+      monthlyBudget,
+      rolloverIn,
+      transferIn,
+      effectiveBudget,
+      spent: actualExpense,
+      budgetRemaining,
+      percentUsed,
+      isOverBudget: actualExpense > effectiveBudget && effectiveBudget > 0,
+      recordedIncome: actualIncome,
+      sisaPemasukan,
+      investPercent: investPct,
+      savingsPercent: savingsPct,
+      plannedInvestAmount,
+      plannedSavingsAmount,
+      investRealized: totalInvestmentSpentThisMonth,
+      savingsRealized: savingsDeposit,
+      noSisaWarning: rawSisa <= 0,
+      settlement,
+    };
+  }
+
+  // ==================== MODE LENGKAP ====================
+  const postsList: BudgetPost[] = resolvedMode === 'complete' && completeConfig ? completeConfig.posts : [];
   const primaryExpensePostId =
     postsList.find((p) => p.kind === 'expense')?.id ||
     postsList.find((p) => p.name.toLowerCase().includes('biaya'))?.id ||
     postsList[0]?.id;
 
-  const primarySavingsPostId =
-    postsList.find((p) => p.kind === 'savings')?.id ||
-    postsList.find((p) => p.name.toLowerCase().includes('nabung') || p.name.toLowerCase().includes('tabung'))?.id;
+  const primarySavingsPost =
+    postsList.find((p) => p.kind === 'savings') ||
+    postsList.find((p) => p.name.toLowerCase().includes('nabung') || p.name.toLowerCase().includes('tabung'));
 
-  const primaryInvestmentPostId =
-    postsList.find((p) => p.kind === 'investment')?.id ||
-    postsList.find((p) => p.name.toLowerCase().includes('invest'))?.id;
+  const primaryInvestmentPost =
+    postsList.find((p) => p.kind === 'investment') ||
+    postsList.find((p) => p.name.toLowerCase().includes('invest'));
 
   const postSummaries: PostUsageSummary[] = postsList.map((post) => {
     const rolloverIn = settlements
@@ -270,23 +411,21 @@ export const calculateMonthlyBudgetStatus = ({
     const transferIn = transferInMap.get(post.id) || 0;
     const transferOut = transferOutMap.get(post.id) || 0;
     const allocated = Number(post.amount) || 0;
+    // Budget bulanan tetap sebesar rencana (plus rollover manual atau transfer masuk manual), TIDAK naik karena pemasukan tambahan
     const effectiveBudget = Math.max(0, allocated + rolloverIn + transferIn);
 
     let spent = transferOut;
     if (post.id === primaryExpensePostId) {
       spent += actualExpense;
-    } else if (post.id === primarySavingsPostId) {
-      // Transfers into savings targets count as fulfilling the Nabung post
+    } else if (primarySavingsPost && post.id === primarySavingsPost.id) {
       spent += savingsDeposit;
-    } else if (post.id === primaryInvestmentPostId) {
+    } else if (primaryInvestmentPost && post.id === primaryInvestmentPost.id) {
       spent += totalInvestmentSpentThisMonth;
     }
 
     const remaining = effectiveBudget - spent;
     const percentUsed = effectiveBudget > 0 ? Math.round((spent / effectiveBudget) * 100) : 0;
-    const settlement = settlements.find(
-      (s) => s.monthKey === monthKey && s.postId === post.id
-    );
+    const settlement = settlements.find((s) => s.monthKey === monthKey && s.postId === post.id);
 
     return {
       post,
@@ -306,13 +445,65 @@ export const calculateMonthlyBudgetStatus = ({
   const primaryExpensePost =
     postSummaries.find((p) => p.post.id === primaryExpensePostId) || null;
 
+  // Pemasukan Tambahan rule for Mode Lengkap:
+  // Pemasukan Tambahan = Pemasukan Tercatat - Total Pemasukan yang direncanakan
+  // Tidak pernah menaikkan Biaya Bulanan! Dialokasikan ke Investasi & Nabung sesuai rasio persen keduanya.
+  let extraIncomeAllocation: ExtraIncomeAllocation | null = null;
+  if (resolvedMode === 'complete' && completeConfig) {
+    const extraAmount = Math.max(0, actualIncome - (completeConfig.monthlyIncome || 0));
+    const invPct = primaryInvestmentPost ? Number(primaryInvestmentPost.percent) || 0 : 0;
+    const savPct = primarySavingsPost ? Number(primarySavingsPost.percent) || 0 : 0;
+    const hasInvestmentPost = Boolean(primaryInvestmentPost);
+    const hasSavingsPost = Boolean(primarySavingsPost);
+
+    let toInvestment = 0;
+    let toSavings = 0;
+    let unallocated = 0;
+
+    if (extraAmount > 0) {
+      if (hasInvestmentPost && hasSavingsPost) {
+        const sumPct = invPct + savPct;
+        if (sumPct > 0) {
+          toInvestment = Math.round((extraAmount * invPct) / sumPct);
+          toSavings = extraAmount - toInvestment;
+        } else {
+          toInvestment = Math.round(extraAmount / 2);
+          toSavings = extraAmount - toInvestment;
+        }
+      } else if (hasInvestmentPost) {
+        toInvestment = extraAmount;
+      } else if (hasSavingsPost) {
+        toSavings = extraAmount;
+      } else {
+        unallocated = extraAmount;
+      }
+    }
+
+    extraIncomeAllocation = {
+      extraAmount,
+      toInvestment,
+      toSavings,
+      unallocated,
+      hasInvestmentPost,
+      hasSavingsPost,
+      investmentPostName: primaryInvestmentPost?.name,
+      savingsPostName: primarySavingsPost?.name,
+    };
+  }
+
   return {
     monthKey,
-    config,
-    plannedIncome: config?.monthlyIncome || 0,
+    mode: resolvedMode,
+    config: resolvedMode === 'complete' ? completeConfig : null,
+    simpleConfig: resolvedMode === 'simple' ? simpleConfig : null,
+    simpleSummary,
+    extraIncomeAllocation,
+    plannedIncome: resolvedMode === 'complete' ? completeConfig?.monthlyIncome || 0 : 0,
     actualIncome,
     actualExpense,
     actualNetSavingsDeposit,
+    actualSavingsDepositGross: savingsDeposit,
+    actualInvestmentSpent: totalInvestmentSpentThisMonth,
     posts: postSummaries,
     primaryExpensePost,
     expenseCategories,
@@ -320,10 +511,15 @@ export const calculateMonthlyBudgetStatus = ({
 };
 
 /**
- * Computes monthly financial verdict with transparent rules:
- * - 'Baik': all posts within budget AND savings meets target this month
- * - 'Waspada': one post exceeds budget OR savings is below target
- * - 'Buruk': total expenses exceed income this month OR savings is 0 for 2 consecutive months
+ * Verdict Perencanaan Bulanan sesuai mode aktif (Sederhana vs Lengkap):
+ * - Mode Sederhana:
+ *   Baik -> belanja <= Budget Bulanan AND sisa teralokasi (atau tabungan/investasi terpenuhi)
+ *   Waspada -> belanja melebihi Budget Bulanan OR pemasukan <= Budget Bulanan OR sisa belum teralokasi
+ *   Buruk -> total pengeluaran > pemasukan bulan ini OR tabungan 0 dua bulan berturut-turut
+ * - Mode Lengkap:
+ *   Baik -> semua pos dalam alokasi AND tabungan/sisa dialokasikan
+ *   Waspada -> ada pos melebihi budget OR tabungan di bawah target OR ada pemasukan tambahan belum dialokasikan
+ *   Buruk -> total pengeluaran > pemasukan bulan ini OR tabungan 0 dua bulan berturut-turut
  */
 export const computeMonthlyVerdict = ({
   monthKey,
@@ -341,7 +537,6 @@ export const computeMonthlyVerdict = ({
   const prevMonthKey = getPreviousMonthKey(monthKey);
   const prevMonthTxs = transactions.filter((t) => getTxMonthKey(t.date) === prevMonthKey);
 
-  // Check if previous month had any net savings (either deposit to savings target or income - expense > 0)
   let prevSavingsDeposit = 0;
   let prevInc = 0;
   let prevExp = 0;
@@ -357,39 +552,66 @@ export const computeMonthlyVerdict = ({
     }
   });
 
-  const thisMonthSaved = budgetStatus.actualNetSavingsDeposit;
+  const thisMonthSaved = budgetStatus.actualSavingsDepositGross;
   const prevMonthSaved = prevSavingsDeposit > 0 ? prevSavingsDeposit : Math.max(0, prevInc - prevExp);
 
-  // Determine active savings target for the month:
-  // If user configured a Nabung budget post, use its allocation; otherwise fallback to savingsTargets monthly sum or monthlySavingsTarget
-  const nabungPost = budgetStatus.posts.find(
-    (p) => p.post.kind === 'savings' || p.post.name.toLowerCase().includes('nabung')
-  );
-  const savingsTargetFromGoals = savingsTargets.reduce((sum, s) => {
-    const rem = Math.max(0, s.target_amount - (s.current_amount || 0));
-    if (rem <= 0) return sum;
-    return sum + Math.ceil(rem / 12);
-  }, 0);
-
-  const effectiveSavingsTarget =
-    nabungPost?.allocated || savingsTargetFromGoals || monthlySavingsTarget || 0;
-
-  const overBudgetPosts = budgetStatus.posts.filter((p) => p.isOverBudget);
   const incomeExceeded =
     budgetStatus.actualIncome > 0 && budgetStatus.actualExpense > budgetStatus.actualIncome;
   const zeroSavingsTwoMonths =
     prevMonthTxs.length > 0 &&
     thisMonthSaved <= 0 &&
     prevMonthSaved <= 0 &&
-    (budgetStatus.actualIncome - budgetStatus.actualExpense) <= 0;
+    budgetStatus.actualIncome - budgetStatus.actualExpense <= 0;
 
-  const expenseByPost = budgetStatus.posts.map((p) => ({
+  // Build Money Trail
+  let expenseByPost = budgetStatus.posts.map((p) => ({
     postId: p.post.id,
     postName: p.post.name,
     allocated: p.effectiveBudget,
     used: p.spent,
     remaining: p.remaining,
   }));
+
+  let effectiveSavingsTarget = monthlySavingsTarget || 0;
+
+  if (budgetStatus.mode === 'simple' && budgetStatus.simpleSummary) {
+    const ss = budgetStatus.simpleSummary;
+    effectiveSavingsTarget = ss.plannedSavingsAmount;
+    expenseByPost = [
+      {
+        postId: 'simple-budget',
+        postName: 'Budget Bulanan',
+        allocated: ss.effectiveBudget,
+        used: ss.spent,
+        remaining: ss.budgetRemaining,
+      },
+      {
+        postId: 'simple-invest',
+        postName: `Rencana Investasi (${ss.investPercent}%)`,
+        allocated: ss.plannedInvestAmount,
+        used: ss.investRealized,
+        remaining: ss.plannedInvestAmount - ss.investRealized,
+      },
+      {
+        postId: 'simple-savings',
+        postName: `Rencana Tabungan (${ss.savingsPercent}%)`,
+        allocated: ss.plannedSavingsAmount,
+        used: ss.savingsRealized,
+        remaining: ss.plannedSavingsAmount - ss.savingsRealized,
+      },
+    ];
+  } else {
+    const nabungPost = budgetStatus.posts.find(
+      (p) => p.post.kind === 'savings' || p.post.name.toLowerCase().includes('nabung')
+    );
+    const savingsTargetFromGoals = savingsTargets.reduce((sum, s) => {
+      const rem = Math.max(0, s.target_amount - (s.current_amount || 0));
+      if (rem <= 0) return sum;
+      return sum + Math.ceil(rem / 12);
+    }, 0);
+    effectiveSavingsTarget =
+      nabungPost?.allocated || savingsTargetFromGoals || monthlySavingsTarget || 0;
+  }
 
   const moneyTrail = {
     income: budgetStatus.actualIncome,
@@ -401,6 +623,7 @@ export const computeMonthlyVerdict = ({
 
   const reasons: string[] = [];
 
+  // 1. Kondisi BURUK (berlaku di kedua mode)
   if (incomeExceeded || zeroSavingsTwoMonths) {
     if (incomeExceeded) {
       reasons.push(
@@ -410,32 +633,97 @@ export const computeMonthlyVerdict = ({
     if (zeroSavingsTwoMonths) {
       reasons.push('Tabungan Rp 0 selama dua bulan berturut-turut.');
     }
-    if (overBudgetPosts.length > 0) {
+    if (budgetStatus.mode === 'simple' && budgetStatus.simpleSummary?.isOverBudget) {
       reasons.push(
-        `Pos melebihi anggaran: ${overBudgetPosts.map((p) => p.post.name).join(', ')}.`
+        `Belanja melewati Budget Bulanan tetap (${formatRupiah(budgetStatus.simpleSummary.effectiveBudget)}).`
       );
     }
     return {
       level: 'Buruk',
       mood: 'sad',
-      headline: 'Perlu Perhatian Segera',
+      headline: 'Kondisi Kritis — Perlu Rem Pengeluaran',
       reasons,
       moneyTrail,
     };
   }
 
+  // 2. Belum ada mode / pengaturan budgeting
+  if (!budgetStatus.mode || (!budgetStatus.simpleSummary && !budgetStatus.config)) {
+    return {
+      level: 'Waspada',
+      mood: 'neutral',
+      headline: 'Budgeting Belum Diatur',
+      reasons: ['Pilih Mode Sederhana atau Mode Lengkap di Profil & Budgeting untuk mulai memantau anggaran.'],
+      moneyTrail,
+    };
+  }
+
+  // 3. Evaluasi MODE SEDERHANA
+  if (budgetStatus.mode === 'simple' && budgetStatus.simpleSummary) {
+    const ss = budgetStatus.simpleSummary;
+    const unallocatedSavings = ss.plannedSavingsAmount > 0 && ss.savingsRealized < ss.plannedSavingsAmount;
+    const unallocatedInvest = ss.plannedInvestAmount > 0 && ss.investRealized < ss.plannedInvestAmount;
+
+    if (ss.isOverBudget || ss.noSisaWarning || unallocatedSavings || unallocatedInvest) {
+      if (ss.isOverBudget) {
+        reasons.push(
+          `Belanja (${formatRupiah(ss.spent)}) melewati Budget Bulanan (${formatRupiah(ss.effectiveBudget)}).`
+        );
+      }
+      if (ss.noSisaWarning) {
+        reasons.push(
+          `Pemasukan bulan ini (${formatRupiah(ss.recordedIncome)}) tidak melebihi Budget Bulanan (${formatRupiah(ss.monthlyBudget)}) sehingga belum ada sisa untuk Investasi & Tabungan.`
+        );
+      } else {
+        if (unallocatedSavings) {
+          reasons.push(
+            `Rencana Tabungan (${formatRupiah(ss.plannedSavingsAmount)}) baru terealisasi ${formatRupiah(ss.savingsRealized)}.`
+          );
+        }
+        if (unallocatedInvest) {
+          reasons.push(
+            `Rencana Investasi (${formatRupiah(ss.plannedInvestAmount)}) baru terealisasi ${formatRupiah(ss.investRealized)}.`
+          );
+        }
+      }
+      return {
+        level: 'Waspada',
+        mood: 'neutral',
+        headline: 'Perlu Penyesuaian Mode Sederhana',
+        reasons,
+        moneyTrail,
+      };
+    }
+
+    reasons.push(
+      `Belanja (${formatRupiah(ss.spent)}) masih aman di dalam Budget Bulanan (${formatRupiah(ss.effectiveBudget)}).`
+    );
+    if (ss.sisaPemasukan > 0) {
+      reasons.push(
+        `Sisa ${formatRupiah(ss.sisaPemasukan)} sudah teralokasi ke Investasi (${ss.investPercent}%) & Tabungan (${ss.savingsPercent}%).`
+      );
+    }
+    return {
+      level: 'Baik',
+      mood: 'happy',
+      headline: 'Keuangan Keluarga Terkendali!',
+      reasons,
+      moneyTrail,
+    };
+  }
+
+  // 4. Evaluasi MODE LENGKAP
+  const overBudgetPosts = budgetStatus.posts.filter((p) => p.isOverBudget);
+  const extraUnallocated = (budgetStatus.extraIncomeAllocation?.unallocated || 0) > 0;
   const savingsBelowTarget =
     effectiveSavingsTarget > 0 &&
     thisMonthSaved < effectiveSavingsTarget &&
     Math.max(0, budgetStatus.actualIncome - budgetStatus.actualExpense) < effectiveSavingsTarget;
 
-  if (overBudgetPosts.length > 0 || savingsBelowTarget || !budgetStatus.config) {
-    if (!budgetStatus.config) {
-      reasons.push('Anggaran bulanan belum diatur di Profil — atur dulu agar pantauan lebih akurat.');
-    }
+  if (overBudgetPosts.length > 0 || savingsBelowTarget || extraUnallocated) {
     if (overBudgetPosts.length > 0) {
       reasons.push(
-        `Pos ${overBudgetPosts.map((p) => p.post.name).join(', ')} sudah melewati batas anggaran.`
+        `Pos ${overBudgetPosts.map((p) => p.post.name).join(', ')} sudah melewati batas alokasi.`
       );
     }
     if (savingsBelowTarget) {
@@ -443,8 +731,10 @@ export const computeMonthlyVerdict = ({
         `Setoran tabungan bulan ini (${formatRupiah(thisMonthSaved)}) masih di bawah target (${formatRupiah(effectiveSavingsTarget)}).`
       );
     }
-    if (reasons.length === 0) {
-      reasons.push('Tetap pantau pengeluaran agar sesuai rencana bulanan.');
+    if (extraUnallocated && budgetStatus.extraIncomeAllocation) {
+      reasons.push(
+        `Ada Pemasukan Tambahan ${formatRupiah(budgetStatus.extraIncomeAllocation.unallocated)} yang belum dialokasikan.`
+      );
     }
     return {
       level: 'Waspada',
@@ -455,7 +745,7 @@ export const computeMonthlyVerdict = ({
     };
   }
 
-  reasons.push('Semua pos pengeluaran masih berada di dalam batas anggaran.');
+  reasons.push('Semua pos masih berada di dalam batas alokasi rencana.');
   if (effectiveSavingsTarget > 0) {
     reasons.push(
       `Tabungan bulan ini terjaga (${formatRupiah(Math.max(thisMonthSaved, budgetStatus.actualIncome - budgetStatus.actualExpense))} terhadap target ${formatRupiah(effectiveSavingsTarget)}).`
@@ -508,32 +798,58 @@ export const generateMonthlyInsights = ({
     });
   }
 
-  // 2. Pos yang melebihi budget (atau hampir habis)
-  const overPosts = budgetStatus.posts.filter((p) => p.isOverBudget);
-  const nearLimitPosts = budgetStatus.posts.filter(
-    (p) => !p.isOverBudget && p.percentUsed >= 85 && p.effectiveBudget > 0
-  );
-  if (overPosts.length > 0) {
-    tips.push({
-      id: 'over-budget',
-      title: `Pos Melebihi Budget: ${overPosts.map((p) => p.post.name).join(', ')}`,
-      description: `Pos ${overPosts[0].post.name} sudah terpakai ${overPosts[0].percentUsed}% (${formatRupiah(overPosts[0].spent)} dari ${formatRupiah(overPosts[0].effectiveBudget)}). Pertimbangkan menahan belanja non-pokok atau ambil dari tabungan jika mendesak.`,
-      tone: 'bad',
-    });
-  } else if (nearLimitPosts.length > 0) {
-    tips.push({
-      id: 'near-limit',
-      title: `Pos Mendekati Batas: ${nearLimitPosts[0].post.name}`,
-      description: `Sudah terpakai ${nearLimitPosts[0].percentUsed}%, tersisa ${formatRupiah(nearLimitPosts[0].remaining)} sampai akhir bulan.`,
-      tone: 'warn',
-    });
-  } else if (budgetStatus.config) {
-    tips.push({
-      id: 'budget-on-track',
-      title: 'Semua Pos Masih Sesuai Rencana',
-      description: 'Belum ada pos yang melewati anggaran bulan ini. Pertahankan disiplin alokasi.',
-      tone: 'good',
-    });
+  // 2. Status budget sesuai mode aktif
+  if (budgetStatus.mode === 'simple' && budgetStatus.simpleSummary) {
+    const ss = budgetStatus.simpleSummary;
+    if (ss.isOverBudget) {
+      tips.push({
+        id: 'simple-over',
+        title: `Belanja Melewati Budget Bulanan`,
+        description: `Terpakai ${formatRupiah(ss.spent)} dari Budget Bulanan tetap ${formatRupiah(ss.effectiveBudget)}.`,
+        tone: 'bad',
+      });
+    } else if (ss.noSisaWarning) {
+      tips.push({
+        id: 'simple-no-sisa',
+        title: 'Pemasukan Belum Melebihi Budget',
+        description: `Pemasukan ${formatRupiah(ss.recordedIncome)} masih ≤ Budget Bulanan ${formatRupiah(ss.monthlyBudget)}.`,
+        tone: 'warn',
+      });
+    } else {
+      tips.push({
+        id: 'simple-ok',
+        title: 'Budget Bulanan Tetap Aman',
+        description: `Sisa Budget belanja ${formatRupiah(ss.budgetRemaining)}. Sisa pemasukan ${formatRupiah(ss.sisaPemasukan)} siap dialokasikan ke Investasi & Tabungan.`,
+        tone: 'good',
+      });
+    }
+  } else {
+    const overPosts = budgetStatus.posts.filter((p) => p.isOverBudget);
+    const nearLimitPosts = budgetStatus.posts.filter(
+      (p) => !p.isOverBudget && p.percentUsed >= 85 && p.effectiveBudget > 0
+    );
+    if (overPosts.length > 0) {
+      tips.push({
+        id: 'over-budget',
+        title: `Pos Melebihi Budget: ${overPosts.map((p) => p.post.name).join(', ')}`,
+        description: `Pos ${overPosts[0].post.name} sudah terpakai ${overPosts[0].percentUsed}% (${formatRupiah(overPosts[0].spent)} dari ${formatRupiah(overPosts[0].effectiveBudget)}).`,
+        tone: 'bad',
+      });
+    } else if (nearLimitPosts.length > 0) {
+      tips.push({
+        id: 'near-limit',
+        title: `Pos Mendekati Batas: ${nearLimitPosts[0].post.name}`,
+        description: `Sudah terpakai ${nearLimitPosts[0].percentUsed}%, tersisa ${formatRupiah(nearLimitPosts[0].remaining)} sampai akhir bulan.`,
+        tone: 'warn',
+      });
+    } else if (budgetStatus.config) {
+      tips.push({
+        id: 'budget-on-track',
+        title: 'Semua Pos Masih Sesuai Rencana',
+        description: 'Belum ada pos yang melewati anggaran bulan ini.',
+        tone: 'good',
+      });
+    }
   }
 
   // 3. Tingkat tabungan bulan ini vs target
@@ -573,13 +889,6 @@ export const generateMonthlyInsights = ({
         title: `Pengeluaran Lebih Hemat ${diffPct}% dari Bulan Lalu`,
         description: `Bulan ini ${formatRupiah(budgetStatus.actualExpense)} dibanding ${formatRupiah(prevExpense)} di ${formatMonthKeyLabel(prevMonthKey)}.`,
         tone: 'good',
-      });
-    } else {
-      tips.push({
-        id: 'mom-compare',
-        title: 'Pengeluaran Sama dengan Bulan Lalu',
-        description: `Total pengeluaran sama di angka ${formatRupiah(budgetStatus.actualExpense)}.`,
-        tone: 'info',
       });
     }
   }

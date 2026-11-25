@@ -12,13 +12,21 @@ import {
   Wallet,
   Printer,
   X,
+  Lock,
+  TrendingUp,
+  Sparkles,
 } from 'lucide-react';
 import { useFinance } from '../../context/FinanceContext';
 import { formatRupiah, parseRupiahInput } from '../../lib/formatters';
-import { formatMonthKeyLabel, getCurrentMonthKey, getMonthKey } from '../../lib/budgetUtils';
+import {
+  FIXED_BUDGET_RULE_TEXT,
+  formatMonthKeyLabel,
+  getCurrentMonthKey,
+  getMonthKey,
+  PostUsageSummary,
+} from '../../lib/budgetUtils';
 import { CategoryIcon } from '../ui/CategoryIcon';
 import { BankLogo } from '../ui/BankLogo';
-import { PostUsageSummary } from '../../lib/budgetUtils';
 import { RemainderActionType } from '../../types';
 import { CatFinnySvg } from '../mascot/CatFinnySvg';
 
@@ -43,7 +51,7 @@ export const BudgetingPage: React.FC<BudgetingPageProps> = ({
 
   const now = new Date();
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState(now.getMonth()); // 0-11
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
 
   const monthKey = getMonthKey(selectedYear, selectedMonth);
   const currentMonthKey = getCurrentMonthKey();
@@ -52,7 +60,7 @@ export const BudgetingPage: React.FC<BudgetingPageProps> = ({
     [getBudgetStatusForMonth, monthKey]
   );
 
-  // Modal: Ambil dari Tabungan (AMBIL-DARI-TABUNGAN)
+  // Modal: Ambil dari Tabungan
   const [isTakeFromSavingsOpen, setIsTakeFromSavingsOpen] = useState(false);
   const [takeTargetPost, setTakeTargetPost] = useState<{ id: string; name: string } | null>(null);
   const [selectedSavingsId, setSelectedSavingsId] = useState<string>('');
@@ -61,8 +69,8 @@ export const BudgetingPage: React.FC<BudgetingPageProps> = ({
   const [takeError, setTakeError] = useState<string>('');
   const [takeSuccess, setTakeSuccess] = useState<string>('');
 
-  // Modal / inline state: Sisa Akhir Bulan per pos
-  const [settlingPost, setSettlingPost] = useState<PostUsageSummary | null>(null);
+  // Modal: Sisa Akhir Bulan
+  const [settlingPost, setSettlingPost] = useState<{ id: string; name: string; remaining: number } | null>(null);
   const [settlementAction, setSettlementAction] = useState<RemainderActionType>('to_savings');
   const [settlementSavingsId, setSettlementSavingsId] = useState<string>('');
   const [settlementError, setSettlementError] = useState<string>('');
@@ -98,7 +106,6 @@ export const BudgetingPage: React.FC<BudgetingPageProps> = ({
   const selectedSavingsObj = savingsTargets.find((s) => s.id === selectedSavingsId);
   const takeAmount = parseRupiahInput(takeAmountRaw);
 
-  // Live impact preview on savings target progress
   const savingsImpactPreview = useMemo(() => {
     if (!selectedSavingsObj || takeAmount <= 0) return null;
     const beforeBal = selectedSavingsObj.current_amount || 0;
@@ -121,7 +128,7 @@ export const BudgetingPage: React.FC<BudgetingPageProps> = ({
       return;
     }
     if (takeAmount > (selectedSavingsObj.current_amount || 0)) {
-      setTakeError('Saldo pos tabungan yang dipilih tidak mencukupi.');
+      setTakeError('Saldo pos tabungan tidak mencukupi.');
       return;
     }
 
@@ -143,8 +150,8 @@ export const BudgetingPage: React.FC<BudgetingPageProps> = ({
     }
   };
 
-  const openSettleModal = (summary: PostUsageSummary) => {
-    setSettlingPost(summary);
+  const openSettleModal = (id: string, name: string, remaining: number) => {
+    setSettlingPost({ id, name, remaining });
     setSettlementAction('to_savings');
     setSettlementSavingsId(savingsTargets[0]?.id || '');
     setSettlementError('');
@@ -162,8 +169,8 @@ export const BudgetingPage: React.FC<BudgetingPageProps> = ({
 
     const res = await settleMonthPostRemainder({
       monthKey,
-      postId: settlingPost.post.id,
-      postName: settlingPost.post.name,
+      postId: settlingPost.id,
+      postName: settlingPost.name,
       amount: Math.max(0, settlingPost.remaining),
       action: settlementAction,
       targetSavingsId: settlementAction === 'to_savings' ? settlementSavingsId : undefined,
@@ -176,6 +183,9 @@ export const BudgetingPage: React.FC<BudgetingPageProps> = ({
     }
   };
 
+  const isSimple = budgetStatus.mode === 'simple' && Boolean(budgetStatus.simpleSummary);
+  const isComplete = budgetStatus.mode === 'complete' && Boolean(budgetStatus.config);
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* Header */}
@@ -185,11 +195,18 @@ export const BudgetingPage: React.FC<BudgetingPageProps> = ({
             <PieChart className="w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-              Pantauan Budgeting Bulanan
-            </h2>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
+                Pantauan Budgeting Bulanan
+              </h2>
+              {budgetStatus.mode && (
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-finance-100 text-finance-700 border border-finance-200">
+                  {budgetStatus.mode === 'simple' ? 'Mode Sederhana' : 'Mode Lengkap'}
+                </span>
+              )}
+            </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Alokasi pemasukan per pos, progres pemakaian, dan pengelolaan sisa akhir bulan
+              Pantauan progres belanja, alokasi sisa/tambahan, dan penutupan akhir bulan
             </p>
           </div>
         </div>
@@ -197,19 +214,25 @@ export const BudgetingPage: React.FC<BudgetingPageProps> = ({
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={onOpenPrintModal}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-finance-200 dark:border-slate-700 text-finance-700 dark:text-finance-300 text-xs font-bold hover:bg-finance-50 transition-all"
+            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-finance-200 dark:border-slate-700 text-finance-700 dark:text-finance-300 text-xs font-bold hover:bg-finance-50"
           >
             <Printer className="w-3.5 h-3.5" />
             <span>Ekspor PDF</span>
           </button>
           <button
             onClick={onOpenBudgetSettings}
-            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-finance-600 hover:bg-finance-700 text-white text-xs font-bold shadow-sm transition-all"
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-finance-600 hover:bg-finance-700 text-white text-xs font-bold shadow-sm"
           >
             <Settings className="w-4 h-4" />
-            <span>Atur Proporsi Budget</span>
+            <span>{budgetStatus.mode ? 'Atur / Ganti Mode' : 'Pilih Mode Budgeting'}</span>
           </button>
         </div>
+      </div>
+
+      {/* Key Fixed Budget Rule Notice (ATURAN-BUDGET-TETAP) */}
+      <div className="p-3.5 rounded-2xl bg-finance-50 dark:bg-finance-950/30 border border-finance-200 dark:border-finance-800 text-xs flex items-center gap-2.5 text-finance-800 dark:text-finance-200 font-bold">
+        <Lock className="w-4 h-4 text-finance-600 shrink-0" />
+        <span>{FIXED_BUDGET_RULE_TEXT}</span>
       </div>
 
       {/* Month Navigator */}
@@ -242,31 +265,223 @@ export const BudgetingPage: React.FC<BudgetingPageProps> = ({
         </button>
       </div>
 
-      {/* Empty State if no budgeting configured for this month */}
-      {!budgetStatus.config ? (
+      {/* Empty State when no mode configured */}
+      {!isSimple && !isComplete ? (
         <div className="rounded-3xl bg-white dark:bg-slate-900 border border-finance-200 dark:border-slate-800 p-6 sm:p-8 text-center space-y-4">
           <div className="flex justify-center">
-            <CatFinnySvg mood="neutral" size={110} idPrefix="budgetEmptyCat" />
+            <CatFinnySvg mood="neutral" size={115} idPrefix="budgetEmptyCat" />
           </div>
           <div className="max-w-md mx-auto space-y-1.5">
             <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
               Budgeting {formatMonthKeyLabel(monthKey)} Belum Diatur
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              Isi total pemasukan bulanan secara manual dan bagi ke pos-pos pilihanmu (misalnya Biaya Bulanan, Investasi, Nabung). Pengaturan baru berlaku untuk bulan berjalan ke depan tanpa mengubah data bulan lalu.
+              Pilih <strong>Mode Sederhana</strong> (atur budget belanja tetap + % Investasi/Tabungan dari sisa) atau <strong>Mode Lengkap</strong> (rencana total pemasukan + pos-pos bebas). Pengaturan tersimpan di server dan sinkron di semua perangkat.
             </p>
           </div>
           <button
             onClick={onOpenBudgetSettings}
-            className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-finance-600 hover:bg-finance-700 text-white text-xs font-bold shadow-md transition-all"
+            className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-finance-600 hover:bg-finance-700 text-white text-xs font-bold shadow-md"
           >
             <Settings className="w-4 h-4" />
-            Atur Budgeting Sekarang
+            Pilih Mode Budgeting Sekarang
           </button>
         </div>
+      ) : isSimple && budgetStatus.simpleSummary ? (
+        /* ==================== MODE SEDERHANA VIEW ==================== */
+        (() => {
+          const ss = budgetStatus.simpleSummary!;
+          const pctClamped = Math.min(100, Math.max(0, ss.percentUsed));
+          return (
+            <div className="space-y-5">
+              {/* Top 3 Summary Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-finance-200 dark:border-slate-800">
+                  <span className="text-[11px] font-bold uppercase text-slate-400 block">
+                    Pemasukan Tercatat
+                  </span>
+                  <p className="text-xl font-black text-finance-700 dark:text-finance-300 mt-1">
+                    {formatRupiah(ss.recordedIncome)}
+                  </p>
+                </div>
+                <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-finance-200 dark:border-slate-800">
+                  <span className="text-[11px] font-bold uppercase text-slate-400 block">
+                    Budget Bulanan Tetap
+                  </span>
+                  <p className="text-xl font-black text-slate-900 dark:text-white mt-1">
+                    {formatRupiah(ss.effectiveBudget)}
+                  </p>
+                </div>
+                <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-finance-200 dark:border-slate-800">
+                  <span className="text-[11px] font-bold uppercase text-slate-400 block">
+                    Sisa (Pemasukan − Budget)
+                  </span>
+                  <p className="text-xl font-black text-gold-600 dark:text-amber-400 mt-1">
+                    {formatRupiah(ss.sisaPemasukan)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Budget Bulanan Progress Card + Category Breakdown */}
+              <div className="rounded-3xl bg-white dark:bg-slate-900 border border-finance-200 dark:border-slate-800 p-5 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-base font-black text-slate-900 dark:text-white">
+                      Budget Bulanan Belanja
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Terpakai <strong>{formatRupiah(ss.spent)}</strong> dari{' '}
+                      <strong>{formatRupiah(ss.effectiveBudget)}</strong> •{' '}
+                      {ss.budgetRemaining >= 0
+                        ? `Sisa ${formatRupiah(ss.budgetRemaining)}`
+                        : `Melebihi ${formatRupiah(Math.abs(ss.budgetRemaining))}`}
+                    </p>
+                  </div>
+                  {(ss.isOverBudget || ss.percentUsed >= 85) && (
+                    <button
+                      type="button"
+                      onClick={() => openTakeFromSavings('simple-budget', 'Budget Bulanan')}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gold-500 hover:bg-gold-600 text-slate-950 text-xs font-extrabold self-start sm:self-auto"
+                    >
+                      <PiggyBank className="w-4 h-4" />
+                      Ambil dari Tabungan
+                    </button>
+                  )}
+                </div>
+
+                <div className="w-full h-3.5 rounded-full bg-cream-200 dark:bg-slate-800 overflow-hidden p-0.5">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      ss.isOverBudget ? 'bg-rose-500' : ss.percentUsed >= 85 ? 'bg-gold-500' : 'bg-finance-500'
+                    }`}
+                    style={{ width: `${pctClamped}%` }}
+                  />
+                </div>
+
+                {/* Category Breakdown */}
+                <div className="pt-2 border-t border-finance-100 dark:border-slate-800 space-y-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
+                    Rincian Pengeluaran per Kategori
+                  </span>
+                  {budgetStatus.expenseCategories.length === 0 ? (
+                    <p className="text-xs text-slate-400">Belum ada pengeluaran kategori di bulan ini.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {budgetStatus.expenseCategories.map((cat) => (
+                        <div
+                          key={cat.categoryId}
+                          className="flex items-center justify-between p-2.5 rounded-xl bg-cream-100/80 dark:bg-slate-950/60 text-xs"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div
+                              className="w-6 h-6 rounded-lg flex items-center justify-center text-white shrink-0"
+                              style={{ backgroundColor: cat.categoryColor }}
+                            >
+                              <CategoryIcon name={cat.categoryIcon} className="w-3 h-3" />
+                            </div>
+                            <span className="font-bold text-slate-800 dark:text-slate-200 truncate">
+                              {cat.categoryName}
+                            </span>
+                          </div>
+                          <span className="font-extrabold text-slate-800 dark:text-white ml-2 shrink-0">
+                            {formatRupiah(cat.total)} ({cat.percentOfExpense}%)
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* End-of-Month Remainder for Mode Sederhana */}
+                <div className="pt-3 border-t border-finance-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  {ss.settlement ? (
+                    <div className="flex items-center gap-2 text-xs font-bold text-finance-700">
+                      <CheckCircle2 className="w-4 h-4 shrink-0" />
+                      <span>
+                        Sisa akhir bulan ({formatRupiah(ss.settlement.amount)}):{' '}
+                        {ss.settlement.action === 'to_savings'
+                          ? `Dipindah ke ${ss.settlement.targetSavingsName}`
+                          : ss.settlement.action === 'rollover'
+                          ? 'Digulung ke bulan depan'
+                          : 'Ditarik bebas'}
+                      </span>
+                    </div>
+                  ) : ss.budgetRemaining > 0 ? (
+                    <>
+                      <span className="text-xs text-slate-500 font-semibold">
+                        Sisa Budget Belanja: <strong>{formatRupiah(ss.budgetRemaining)}</strong>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => openSettleModal('simple-budget', 'Budget Bulanan', ss.budgetRemaining)}
+                        className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-finance-50 hover:bg-finance-100 text-finance-700 text-xs font-bold border border-finance-200"
+                      >
+                        <RotateCw className="w-3.5 h-3.5" />
+                        Kelola Sisa Akhir Bulan
+                      </button>
+                    </>
+                  ) : (
+                    <span className="text-xs text-slate-400">Tidak ada sisa budget belanja.</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Sisa & Alokasi Otomatis Card */}
+              <div className="rounded-3xl bg-white dark:bg-slate-900 border border-finance-200 dark:border-slate-800 p-5 shadow-sm space-y-3">
+                <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-gold-500" />
+                  Rencana Alokasi Sisa Bulan Ini
+                </h3>
+
+                {ss.noSisaWarning ? (
+                  <div className="p-4 rounded-2xl bg-gold-50 dark:bg-amber-950/20 border border-gold-300 text-xs space-y-2">
+                    <p className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-gold-600 shrink-0" />
+                      Pemasukan bulan ini tidak melebihi budget. Tidak ada rencana alokasi Investasi/Tabungan dari sisa.
+                    </p>
+                    {ss.spent > ss.recordedIncome && savingsTargets.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => openTakeFromSavings('simple-budget', 'Budget Bulanan')}
+                        className="px-3.5 py-2 rounded-xl bg-gold-500 text-slate-950 text-xs font-extrabold"
+                      >
+                        Ambil dari Tabungan
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="p-4 rounded-2xl bg-gold-50 dark:bg-amber-950/20 border border-gold-200 space-y-1">
+                      <span className="text-xs font-bold text-amber-800">
+                        Rencana Investasi ({ss.investPercent}% dari sisa)
+                      </span>
+                      <p className="text-xl font-black text-amber-900 dark:text-amber-200">
+                        {formatRupiah(ss.plannedInvestAmount)}
+                      </p>
+                      <p className="text-[11px] text-amber-700">
+                        Sudah diinvestasikan bulan ini: {formatRupiah(ss.investRealized)}
+                      </p>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-finance-50 dark:bg-finance-950/30 border border-finance-200 space-y-1">
+                      <span className="text-xs font-bold text-finance-700">
+                        Rencana Tabungan ({ss.savingsPercent}% dari sisa)
+                      </span>
+                      <p className="text-xl font-black text-finance-800 dark:text-finance-200">
+                        {formatRupiah(ss.plannedSavingsAmount)}
+                      </p>
+                      <p className="text-[11px] text-finance-700">
+                        Sudah disetor bulan ini: {formatRupiah(ss.savingsRealized)}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()
       ) : (
+        /* ==================== MODE LENGKAP VIEW ==================== */
         <>
-          {/* Summary Banner */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-finance-200 dark:border-slate-800 shadow-xs">
               <span className="text-[11px] font-bold uppercase text-slate-400 block">
@@ -297,7 +512,7 @@ export const BudgetingPage: React.FC<BudgetingPageProps> = ({
                 Setoran Tabungan Bulan Ini
               </span>
               <p className="text-xl font-black text-gold-600 dark:text-amber-400 mt-1">
-                {formatRupiah(budgetStatus.actualNetSavingsDeposit)}
+                {formatRupiah(budgetStatus.actualSavingsDepositGross)}
               </p>
               <span className="text-[11px] text-slate-500 block mt-0.5">
                 Via Transfer Kas ke pos tabungan
@@ -305,10 +520,70 @@ export const BudgetingPage: React.FC<BudgetingPageProps> = ({
             </div>
           </div>
 
+          {/* Kartu Pemasukan Tambahan (Mode Lengkap) */}
+          {budgetStatus.extraIncomeAllocation && budgetStatus.extraIncomeAllocation.extraAmount > 0 && (
+            <div className="rounded-3xl bg-white dark:bg-slate-900 border border-gold-300 p-5 shadow-sm space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-gold-100 text-gold-600">
+                    <TrendingUp className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-slate-900 dark:text-white">
+                      Pemasukan Tambahan: {formatRupiah(budgetStatus.extraIncomeAllocation.extraAmount)}
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Pemasukan tercatat melebihi rencana awal. Biaya Bulanan tidak naik — selisih dialokasikan ke Investasi & Tabungan.
+                    </p>
+                  </div>
+                </div>
+                {budgetStatus.extraIncomeAllocation.unallocated > 0 && (
+                  <button
+                    type="button"
+                    onClick={onOpenBudgetSettings}
+                    className="px-3.5 py-2 rounded-xl bg-gold-500 text-slate-950 text-xs font-extrabold self-start sm:self-auto"
+                  >
+                    Alokasikan Sekarang
+                  </button>
+                )}
+              </div>
+
+              {budgetStatus.extraIncomeAllocation.unallocated > 0 ? (
+                <div className="p-3 rounded-xl bg-gold-50 border border-gold-200 text-xs font-bold text-amber-900">
+                  Sisa belum dialokasikan: {formatRupiah(budgetStatus.extraIncomeAllocation.unallocated)}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {budgetStatus.extraIncomeAllocation.hasInvestmentPost && (
+                    <div className="p-3 rounded-2xl bg-gold-50 border border-gold-200">
+                      <span className="text-[11px] font-bold text-amber-800 block">
+                        Alokasi ke {budgetStatus.extraIncomeAllocation.investmentPostName || 'Investasi'}
+                      </span>
+                      <p className="text-base font-black text-amber-900">
+                        +{formatRupiah(budgetStatus.extraIncomeAllocation.toInvestment)}
+                      </p>
+                    </div>
+                  )}
+                  {budgetStatus.extraIncomeAllocation.hasSavingsPost && (
+                    <div className="p-3 rounded-2xl bg-finance-50 border border-finance-200">
+                      <span className="text-[11px] font-bold text-finance-700 block">
+                        Alokasi ke {budgetStatus.extraIncomeAllocation.savingsPostName || 'Nabung'}
+                      </span>
+                      <p className="text-base font-black text-finance-800">
+                        +{formatRupiah(budgetStatus.extraIncomeAllocation.toSavings)}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Cards per Budget Post */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {budgetStatus.posts.map((item) => {
-              const isExpensePost = item.post.kind === 'expense' || item.post.id === budgetStatus.primaryExpensePost?.post.id;
+            {budgetStatus.posts.map((item: PostUsageSummary) => {
+              const isExpensePost =
+                item.post.kind === 'expense' || item.post.id === budgetStatus.primaryExpensePost?.post.id;
               const pctClamped = Math.min(100, Math.max(0, item.percentUsed));
               const isLowOrNegative = item.remaining <= 0 || item.percentUsed >= 85;
 
@@ -316,12 +591,9 @@ export const BudgetingPage: React.FC<BudgetingPageProps> = ({
                 <div
                   key={item.post.id}
                   className={`rounded-3xl bg-white dark:bg-slate-900 border p-5 shadow-sm space-y-4 ${
-                    item.isOverBudget
-                      ? 'border-rose-300 dark:border-rose-800'
-                      : 'border-finance-200 dark:border-slate-800'
+                    item.isOverBudget ? 'border-rose-300 dark:border-rose-800' : 'border-finance-200 dark:border-slate-800'
                   }`}
                 >
-                  {/* Card Top */}
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
@@ -336,59 +608,39 @@ export const BudgetingPage: React.FC<BudgetingPageProps> = ({
                             +Rollover {formatRupiah(item.rolloverIn)}
                           </span>
                         )}
-                        {item.transferIn > 0 && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gold-100 text-gold-600">
-                            +Transfer {formatRupiah(item.transferIn)}
-                          </span>
-                        )}
                       </div>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                         Terpakai <strong>{formatRupiah(item.spent)}</strong> dari{' '}
                         <strong>{formatRupiah(item.effectiveBudget)}</strong>
                       </p>
                     </div>
-
-                    <span
-                      className={`text-sm font-black ${
-                        item.isOverBudget
-                          ? 'text-rose-600'
-                          : item.remaining >= 0
-                          ? 'text-finance-700 dark:text-finance-300'
-                          : 'text-rose-600'
-                      }`}
-                    >
+                    <span className={`text-sm font-black ${item.isOverBudget ? 'text-rose-600' : 'text-finance-700'}`}>
                       {item.percentUsed}%
                     </span>
                   </div>
 
-                  {/* Progress Bar */}
                   <div className="space-y-1.5">
                     <div className="w-full h-3 rounded-full bg-cream-200 dark:bg-slate-800 overflow-hidden p-0.5">
                       <div
                         className={`h-full rounded-full transition-all duration-500 ${
-                          item.isOverBudget
-                            ? 'bg-rose-500'
-                            : item.percentUsed >= 85
-                            ? 'bg-gold-500'
-                            : 'bg-finance-500'
+                          item.isOverBudget ? 'bg-rose-500' : item.percentUsed >= 85 ? 'bg-gold-500' : 'bg-finance-500'
                         }`}
                         style={{ width: `${pctClamped}%` }}
                       />
                     </div>
                     <div className="flex items-center justify-between text-xs font-bold">
-                      <span className={item.remaining < 0 ? 'text-rose-600 flex items-center gap-1' : 'text-finance-700 dark:text-finance-300'}>
+                      <span className={item.remaining < 0 ? 'text-rose-600 flex items-center gap-1' : 'text-finance-700'}>
                         {item.remaining < 0 && <AlertTriangle className="w-3.5 h-3.5" />}
                         {item.remaining >= 0
                           ? `Sisa: ${formatRupiah(item.remaining)}`
                           : `Melebihi: ${formatRupiah(Math.abs(item.remaining))}`}
                       </span>
                       <span className="text-slate-400 text-[11px]">
-                        Jatah awal {formatRupiah(item.allocated)}
+                        Rencana tetap {formatRupiah(item.allocated)}
                       </span>
                     </div>
                   </div>
 
-                  {/* Category breakdown inside Biaya Bulanan */}
                   {isExpensePost && (
                     <div className="pt-3 border-t border-finance-100 dark:border-slate-800 space-y-2">
                       <div className="flex items-center justify-between">
@@ -399,7 +651,7 @@ export const BudgetingPage: React.FC<BudgetingPageProps> = ({
                           <button
                             type="button"
                             onClick={() => openTakeFromSavings(item.post.id, item.post.name)}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-gold-500 hover:bg-gold-600 text-slate-950 text-[11px] font-extrabold shadow-xs"
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-gold-500 hover:bg-gold-600 text-slate-950 text-[11px] font-extrabold"
                           >
                             <PiggyBank className="w-3.5 h-3.5" />
                             Ambil dari Tabungan
@@ -427,14 +679,9 @@ export const BudgetingPage: React.FC<BudgetingPageProps> = ({
                                   {cat.categoryName}
                                 </span>
                               </div>
-                              <div className="text-right shrink-0 ml-2">
-                                <span className="font-extrabold text-slate-800 dark:text-white">
-                                  {formatRupiah(cat.total)}
-                                </span>
-                                <span className="text-[10px] text-slate-500 ml-1.5">
-                                  ({cat.percentOfExpense}%)
-                                </span>
-                              </div>
+                              <span className="font-extrabold text-slate-800 dark:text-white ml-2 shrink-0">
+                                {formatRupiah(cat.total)} ({cat.percentOfExpense}%)
+                              </span>
                             </div>
                           ))}
                         </div>
@@ -447,16 +694,15 @@ export const BudgetingPage: React.FC<BudgetingPageProps> = ({
                           className="text-[11px] font-bold text-finance-600 hover:underline inline-flex items-center gap-1"
                         >
                           <ArrowRightLeft className="w-3 h-3" />
-                          Butuh tambahan? Ambil dari Tabungan
+                          Ambil dari Tabungan
                         </button>
                       )}
                     </div>
                   )}
 
-                  {/* End-of-Month Remainder Handling */}
                   <div className="pt-3 border-t border-finance-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     {item.settlement ? (
-                      <div className="flex items-center gap-2 text-xs font-bold text-finance-700 dark:text-finance-300">
+                      <div className="flex items-center gap-2 text-xs font-bold text-finance-700">
                         <CheckCircle2 className="w-4 h-4 shrink-0" />
                         <span>
                           Sisa akhir bulan ({formatRupiah(item.settlement.amount)}):{' '}
@@ -474,17 +720,15 @@ export const BudgetingPage: React.FC<BudgetingPageProps> = ({
                         </span>
                         <button
                           type="button"
-                          onClick={() => openSettleModal(item)}
-                          className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-finance-50 dark:bg-slate-800 hover:bg-finance-100 text-finance-700 dark:text-finance-300 text-xs font-bold border border-finance-200 dark:border-slate-700"
+                          onClick={() => openSettleModal(item.post.id, item.post.name, item.remaining)}
+                          className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-finance-50 hover:bg-finance-100 text-finance-700 text-xs font-bold border border-finance-200"
                         >
                           <RotateCw className="w-3.5 h-3.5" />
                           Kelola Sisa Akhir Bulan
                         </button>
                       </>
                     ) : (
-                      <span className="text-[11px] text-slate-400">
-                        Tidak ada sisa anggaran di pos ini.
-                      </span>
+                      <span className="text-[11px] text-slate-400">Tidak ada sisa anggaran di pos ini.</span>
                     )}
                   </div>
                 </div>
@@ -497,10 +741,7 @@ export const BudgetingPage: React.FC<BudgetingPageProps> = ({
       {/* Modal: Ambil dari Tabungan */}
       {isTakeFromSavingsOpen && takeTargetPost && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            onClick={() => setIsTakeFromSavingsOpen(false)}
-            className="fixed inset-0 bg-slate-950/75 backdrop-blur-sm"
-          />
+          <div onClick={() => setIsTakeFromSavingsOpen(false)} className="fixed inset-0 bg-slate-950/75 backdrop-blur-sm" />
           <div className="relative z-10 w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-finance-200 dark:border-slate-800 p-5 sm:p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-finance-100 dark:border-slate-800">
               <div className="flex items-center gap-2.5">
@@ -508,27 +749,18 @@ export const BudgetingPage: React.FC<BudgetingPageProps> = ({
                   <PiggyBank className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-black text-slate-900 dark:text-white">
-                    Ambil dari Tabungan
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    Transfer kas ke pos {takeTargetPost.name}
-                  </p>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white">Ambil dari Tabungan</h3>
+                  <p className="text-xs text-slate-500">Transfer kas ke {takeTargetPost.name}</p>
                 </div>
               </div>
-              <button
-                onClick={() => setIsTakeFromSavingsOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"
-              >
+              <button onClick={() => setIsTakeFromSavingsOpen(false)} className="p-1.5 rounded-lg text-slate-400">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {savingsTargets.length === 0 ? (
-              <div className="p-4 rounded-2xl bg-cream-100 dark:bg-slate-950 text-center space-y-3">
-                <p className="text-xs text-slate-600 dark:text-slate-300 font-semibold">
-                  Belum ada pos tabungan aktif untuk diambil dananya.
-                </p>
+              <div className="p-4 rounded-2xl bg-cream-100 text-center space-y-3">
+                <p className="text-xs font-semibold text-slate-600">Belum ada pos tabungan aktif.</p>
                 <button
                   type="button"
                   onClick={() => {
@@ -542,115 +774,65 @@ export const BudgetingPage: React.FC<BudgetingPageProps> = ({
               </div>
             ) : (
               <form onSubmit={handleSubmitTakeFromSavings} className="space-y-4">
-                {takeError && (
-                  <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-xs font-bold">
-                    {takeError}
-                  </div>
-                )}
-                {takeSuccess && (
-                  <div className="p-2.5 rounded-xl bg-finance-50 border border-finance-200 text-finance-700 text-xs font-bold">
-                    {takeSuccess}
-                  </div>
-                )}
+                {takeError && <div className="p-2.5 rounded-xl bg-rose-50 text-rose-600 text-xs font-bold">{takeError}</div>}
+                {takeSuccess && <div className="p-2.5 rounded-xl bg-finance-50 text-finance-700 text-xs font-bold">{takeSuccess}</div>}
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Pilih Pos Tabungan Sumber Dana
-                  </label>
-                  <div className="space-y-2 max-h-44 overflow-y-auto">
-                    {savingsTargets.map((st) => (
-                      <button
-                        key={st.id}
-                        type="button"
-                        onClick={() => setSelectedSavingsId(st.id)}
-                        className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition-all ${
-                          selectedSavingsId === st.id
-                            ? 'bg-finance-50 dark:bg-finance-950/30 border-finance-500 ring-1 ring-finance-500'
-                            : 'bg-cream-50 dark:bg-slate-950 border-finance-100 dark:border-slate-800'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          {st.bank_name && <BankLogo bankName={st.bank_name} size="sm" />}
-                          <div className="min-w-0">
-                            <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                              {st.name}
-                            </p>
-                            <p className="text-[10px] text-slate-500">
-                              Target: {formatRupiah(st.target_amount)}
-                            </p>
-                          </div>
-                        </div>
-                        <span className="text-xs font-black text-finance-700 dark:text-finance-300 shrink-0 ml-2">
-                          {formatRupiah(st.current_amount || 0)}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
+                <div className="space-y-2 max-h-44 overflow-y-auto">
+                  {savingsTargets.map((st) => (
+                    <button
+                      key={st.id}
+                      type="button"
+                      onClick={() => setSelectedSavingsId(st.id)}
+                      className={`w-full flex items-center justify-between p-3 rounded-xl border text-left ${
+                        selectedSavingsId === st.id ? 'bg-finance-50 border-finance-500 ring-1 ring-finance-500' : 'bg-cream-50 border-finance-100'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        {st.bank_name && <BankLogo bankName={st.bank_name} size="sm" />}
+                        <span className="text-xs font-bold truncate">{st.name}</span>
+                      </div>
+                      <span className="text-xs font-black text-finance-700">{formatRupiah(st.current_amount || 0)}</span>
+                    </button>
+                  ))}
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Nominal Pengambilan ({appCurrency})
-                  </label>
+                  <label className="block text-xs font-bold mb-1">Nominal ({appCurrency})</label>
                   <input
                     type="text"
                     inputMode="numeric"
                     value={takeAmountRaw ? Number(takeAmountRaw).toLocaleString('id-ID') : ''}
                     onChange={(e) => setTakeAmountRaw(e.target.value.replace(/[^\d]/g, ''))}
                     placeholder="500.000"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-cream-50 dark:bg-slate-950 border border-finance-200 dark:border-slate-800 text-sm font-black"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-cream-50 border border-finance-200 text-sm font-black"
                     required
                   />
                 </div>
 
                 {savingsImpactPreview && (
-                  <div
-                    className={`p-3 rounded-xl border text-xs ${
-                      savingsImpactPreview.sufficient
-                        ? 'bg-gold-50 border-gold-300 text-amber-900'
-                        : 'bg-rose-50 border-rose-300 text-rose-700'
-                    }`}
-                  >
-                    {savingsImpactPreview.sufficient ? (
-                      <span>
-                        Dampak: Progres <strong>{selectedSavingsObj?.name}</strong> turun dari{' '}
-                        <strong>{savingsImpactPreview.beforePct}%</strong> menjadi{' '}
-                        <strong>{savingsImpactPreview.afterPct}%</strong> (sisa saldo{' '}
-                        {formatRupiah(savingsImpactPreview.afterBal)}).
-                      </span>
-                    ) : (
-                      <span>
-                        Saldo {selectedSavingsObj?.name} hanya {formatRupiah(savingsImpactPreview.beforeBal)} — tidak mencukupi.
-                      </span>
-                    )}
+                  <div className={`p-3 rounded-xl border text-xs ${savingsImpactPreview.sufficient ? 'bg-gold-50 border-gold-300 text-amber-900' : 'bg-rose-50 border-rose-300 text-rose-700'}`}>
+                    {savingsImpactPreview.sufficient
+                      ? `Dampak: Progres ${selectedSavingsObj?.name} turun dari ${savingsImpactPreview.beforePct}% menjadi ${savingsImpactPreview.afterPct}%.`
+                      : `Saldo ${selectedSavingsObj?.name} tidak mencukupi.`}
                   </div>
                 )}
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Catatan (Opsional)
-                  </label>
-                  <input
-                    type="text"
-                    value={takeNotes}
-                    onChange={(e) => setTakeNotes(e.target.value)}
-                    placeholder="Contoh: Tambahan kebutuhan pokok akhir bulan"
-                    className="w-full px-3.5 py-2 rounded-xl bg-cream-50 dark:bg-slate-950 border border-finance-200 dark:border-slate-800 text-xs"
-                  />
-                </div>
+                <input
+                  type="text"
+                  value={takeNotes}
+                  onChange={(e) => setTakeNotes(e.target.value)}
+                  placeholder="Catatan (opsional)"
+                  className="w-full px-3.5 py-2 rounded-xl bg-cream-50 border border-finance-200 text-xs"
+                />
 
-                <div className="flex justify-end gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsTakeFromSavingsOpen(false)}
-                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold"
-                  >
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={() => setIsTakeFromSavingsOpen(false)} className="px-4 py-2.5 rounded-xl border text-xs font-bold">
                     Batal
                   </button>
                   <button
                     type="submit"
                     disabled={!savingsImpactPreview?.sufficient}
-                    className="px-4 py-2.5 rounded-xl bg-finance-600 hover:bg-finance-700 text-white text-xs font-bold disabled:opacity-50"
+                    className="px-4 py-2.5 rounded-xl bg-finance-600 text-white text-xs font-bold disabled:opacity-50"
                   >
                     Catat Transfer Kas
                   </button>
@@ -661,137 +843,68 @@ export const BudgetingPage: React.FC<BudgetingPageProps> = ({
         </div>
       )}
 
-      {/* Modal: Kelola Sisa Akhir Bulan */}
+      {/* Modal: Sisa Akhir Bulan */}
       {settlingPost && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            onClick={() => setSettlingPost(null)}
-            className="fixed inset-0 bg-slate-950/75 backdrop-blur-sm"
-          />
+          <div onClick={() => setSettlingPost(null)} className="fixed inset-0 bg-slate-950/75 backdrop-blur-sm" />
           <div className="relative z-10 w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-finance-200 dark:border-slate-800 p-5 sm:p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-finance-100 dark:border-slate-800">
+            <div className="flex items-center justify-between pb-3 border-b border-finance-100">
               <div>
-                <h3 className="text-base font-black text-slate-900 dark:text-white">
-                  Sisa Akhir Bulan: {settlingPost.post.name}
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Sisa dana: <strong className="text-finance-700">{formatRupiah(settlingPost.remaining)}</strong>
-                </p>
+                <h3 className="text-base font-black">Sisa Akhir Bulan: {settlingPost.name}</h3>
+                <p className="text-xs text-slate-500">Sisa: <strong>{formatRupiah(settlingPost.remaining)}</strong></p>
               </div>
-              <button
-                onClick={() => setSettlingPost(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"
-              >
+              <button onClick={() => setSettlingPost(null)} className="p-1.5 rounded-lg text-slate-400">
                 <X className="w-4 h-4" />
               </button>
             </div>
-
-            <form onSubmit={handleConfirmSettlement} className="space-y-3.5">
-              {settlementError && (
-                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-xs font-bold">
-                  {settlementError}
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => setSettlementAction('to_savings')}
-                  className={`w-full p-3 rounded-2xl border text-left flex items-center gap-3 ${
-                    settlementAction === 'to_savings'
-                      ? 'bg-finance-50 border-finance-500 ring-1 ring-finance-500'
-                      : 'bg-cream-50 border-finance-100 dark:bg-slate-950 dark:border-slate-800'
-                  }`}
-                >
-                  <PiggyBank className="w-5 h-5 text-finance-600 shrink-0" />
-                  <div>
-                    <p className="text-xs font-extrabold text-slate-900 dark:text-white">
-                      Pindah ke Tabungan
-                    </p>
-                    <p className="text-[11px] text-slate-500">
-                      Tercatat sebagai Transfer Kas ke target tabungan pilihanmu
-                    </p>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setSettlementAction('rollover')}
-                  className={`w-full p-3 rounded-2xl border text-left flex items-center gap-3 ${
-                    settlementAction === 'rollover'
-                      ? 'bg-finance-50 border-finance-500 ring-1 ring-finance-500'
-                      : 'bg-cream-50 border-finance-100 dark:bg-slate-950 dark:border-slate-800'
-                  }`}
-                >
-                  <RotateCw className="w-5 h-5 text-gold-500 shrink-0" />
-                  <div>
-                    <p className="text-xs font-extrabold text-slate-900 dark:text-white">
-                      Gulung ke Bulan Depan
-                    </p>
-                    <p className="text-[11px] text-slate-500">
-                      Menambah jatah anggaran pos ini di bulan berikutnya
-                    </p>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setSettlementAction('withdraw_free')}
-                  className={`w-full p-3 rounded-2xl border text-left flex items-center gap-3 ${
-                    settlementAction === 'withdraw_free'
-                      ? 'bg-finance-50 border-finance-500 ring-1 ring-finance-500'
-                      : 'bg-cream-50 border-finance-100 dark:bg-slate-950 dark:border-slate-800'
-                  }`}
-                >
-                  <Wallet className="w-5 h-5 text-slate-600 shrink-0" />
-                  <div>
-                    <p className="text-xs font-extrabold text-slate-900 dark:text-white">
-                      Tarik Bebas
-                    </p>
-                    <p className="text-[11px] text-slate-500">
-                      Tandai sisa anggaran sebagai dana bebas di dompet utama
-                    </p>
-                  </div>
-                </button>
-              </div>
+            <form onSubmit={handleConfirmSettlement} className="space-y-3">
+              {settlementError && <div className="p-2.5 rounded-xl bg-rose-50 text-rose-600 text-xs font-bold">{settlementError}</div>}
+              {[
+                { id: 'to_savings' as const, label: 'Pindah ke Tabungan', desc: 'Tercatat sebagai Transfer Kas ke pos tabungan', icon: PiggyBank },
+                { id: 'rollover' as const, label: 'Gulung ke Bulan Depan', desc: 'Menambah anggaran bulan berikutnya', icon: RotateCw },
+                { id: 'withdraw_free' as const, label: 'Tarik Bebas', desc: 'Dana bebas di dompet utama', icon: Wallet },
+              ].map((opt) => {
+                const Icon = opt.icon;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setSettlementAction(opt.id)}
+                    className={`w-full p-3 rounded-2xl border text-left flex items-center gap-3 ${
+                      settlementAction === opt.id ? 'bg-finance-50 border-finance-500 ring-1 ring-finance-500' : 'bg-cream-50 border-finance-100'
+                    }`}
+                  >
+                    <Icon className="w-5 h-5 text-finance-600 shrink-0" />
+                    <div>
+                      <p className="text-xs font-extrabold">{opt.label}</p>
+                      <p className="text-[11px] text-slate-500">{opt.desc}</p>
+                    </div>
+                  </button>
+                );
+              })}
 
               {settlementAction === 'to_savings' && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Pilih Target Tabungan Tujuan
-                  </label>
-                  {savingsTargets.length === 0 ? (
-                    <p className="text-xs text-rose-600 font-semibold">
-                      Belum ada pos tabungan aktif — buat dulu di halaman Tabungan.
-                    </p>
-                  ) : (
-                    <select
-                      value={settlementSavingsId}
-                      onChange={(e) => setSettlementSavingsId(e.target.value)}
-                      className="w-full p-2.5 rounded-xl bg-cream-50 dark:bg-slate-950 border border-finance-200 dark:border-slate-800 text-xs font-bold"
-                    >
-                      {savingsTargets.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name} ({formatRupiah(t.current_amount || 0)} / {formatRupiah(t.target_amount)})
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
+                <select
+                  value={settlementSavingsId}
+                  onChange={(e) => setSettlementSavingsId(e.target.value)}
+                  className="w-full p-2.5 rounded-xl bg-cream-50 border border-finance-200 text-xs font-bold"
+                >
+                  {savingsTargets.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({formatRupiah(t.current_amount || 0)})
+                    </option>
+                  ))}
+                </select>
               )}
 
               <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setSettlingPost(null)}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold"
-                >
+                <button type="button" onClick={() => setSettlingPost(null)} className="px-4 py-2.5 rounded-xl border text-xs font-bold">
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={settlementAction === 'to_savings' && savingsTargets.length === 0}
-                  className="px-4 py-2.5 rounded-xl bg-finance-600 hover:bg-finance-700 text-white text-xs font-bold disabled:opacity-50"
+                  className="px-4 py-2.5 rounded-xl bg-finance-600 text-white text-xs font-bold disabled:opacity-50"
                 >
                   Simpan Pilihan
                 </button>

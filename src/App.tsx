@@ -410,11 +410,12 @@ export const App: React.FC = () => {
                 onOpenSettings={() => openProfileSettings('budgeting')}
               />
 
-              {/* (3) Kartu Besar Biaya Bulanan + Rincian Kategori */}
+              {/* (3) Kartu Besar Biaya Bulanan + Sisa/Pemasukan Tambahan */}
               <MonthlyBudgetHeroCard
                 onOpenBudgeting={() => setActiveTab('budgeting')}
                 onOpenSettings={() => openProfileSettings('budgeting')}
                 onTakeFromSavings={() => setActiveTab('budgeting')}
+                onOpenSavingsTransfer={() => handleOpenSavings()}
               />
 
               {/* (4) Kartu Ringkasan Jejak Uang */}

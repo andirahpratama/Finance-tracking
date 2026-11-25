@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 
-function loadTsModule(relPath, mocks = {}) {
+function loadTsModule(relPath, mocks = {}, customGlobals = {}) {
   const fullUrl = new URL(relPath, import.meta.url);
   const tsSource = readFileSync(fullUrl, 'utf8');
   const jsSource = ts.transpileModule(tsSource, {
@@ -37,6 +37,7 @@ function loadTsModule(relPath, mocks = {}) {
     decodeURIComponent,
     localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
     console,
+    ...customGlobals,
   });
 
   return module.exports;
@@ -221,4 +222,230 @@ test('transfer notes formatting strips internal tags cleanly', () => {
   const cleaned = formatters.formatNotesForDisplay(raw);
   assert.equal(cleaned, 'Biaya Bulanan → Nabung • Sisa bulan');
   assert.equal(savingsUtils.isSavingsTransaction({ notes: raw }), true);
+});
+
+test('Mode Sederhana calculates sisa & auto Invest/Tabungan split, warns when income <= budget, and avoids fixed-budget inflation', () => {
+  const simpleConfigs = [
+    {
+      effectiveFrom: '2026-11',
+      monthlyBudget: 7000000,
+      investPercent: 60,
+      savingsPercent: 40,
+      updatedAt: '2026-11-01T00:00:00Z',
+    },
+  ];
+  const modeHistory = [{ effectiveFrom: '2026-11', mode: 'simple', updatedAt: '2026-11-01T00:00:00Z' }];
+
+  // Case 1: Pemasukan 10jt, Budget 7jt, Belanja 5jt -> Sisa 3jt (1.8jt Invest, 1.2jt Tabungan), Baik
+  const txsGood = [
+    { id: '1', category_id: 'inc-1', type: 'income', amount: 10000000, date: '2026-11-01', notes: '' },
+    { id: '2', category_id: 'exp-1', type: 'expense', amount: 5000000, date: '2026-11-10', notes: '' },
+  ];
+  const statusGood = budgetUtils.calculateMonthlyBudgetStatus({
+    monthKey: '2026-11',
+    modeHistory,
+    activeMode: 'simple',
+    configs: [],
+    simpleConfigs,
+    settlements: [],
+    transactions: txsGood,
+  });
+
+  assert.equal(statusGood.mode, 'simple');
+  assert.equal(statusGood.simpleSummary?.monthlyBudget, 7000000);
+  assert.equal(statusGood.simpleSummary?.sisaPemasukan, 3000000);
+  assert.equal(statusGood.simpleSummary?.plannedInvestAmount, 1800000);
+  assert.equal(statusGood.simpleSummary?.plannedSavingsAmount, 1200000);
+  assert.equal(statusGood.simpleSummary?.noSisaWarning, false);
+
+  // Add realized savings transfer so Mode Sederhana verdict can evaluate Baik cleanly
+  const savMeta = savingsUtils.buildTransferMetaTag({
+    fromType: 'main_wallet',
+    fromId: 'main_wallet',
+    fromLabel: 'Dompet Utama',
+    toType: 'savings_target',
+    toId: 'sav-1',
+    toLabel: 'Tabungan Keluarga',
+  });
+  const txsGoodSaved = [
+    ...txsGood,
+    { id: '3', category_id: '', type: 'expense', amount: 1200000, date: '2026-11-12', notes: `[Transfer Kas: Dompet -> Tabungan Keluarga] ${savMeta}`, is_savings_transfer: true },
+  ];
+  const statusGoodSaved = budgetUtils.calculateMonthlyBudgetStatus({
+    monthKey: '2026-11',
+    modeHistory,
+    activeMode: 'simple',
+    configs: [],
+    simpleConfigs,
+    settlements: [],
+    transactions: txsGoodSaved,
+    manualInvestments: [
+      { id: 'inv-1', user_id: 'u1', name: 'RDN', category: 'Reksa Dana', invested_amount: 1800000, current_value: 1800000, purchase_date: '2026-11-12', notes: '', created_at: '2026-11-12T00:00:00Z' },
+    ],
+  });
+
+  // Also check Waspada before allocation is realized
+  const verdictBeforeAlloc = budgetUtils.computeMonthlyVerdict({
+    monthKey: '2026-11',
+    budgetStatus: statusGood,
+    transactions: txsGood,
+    monthlySavingsTarget: 1000000,
+    savingsTargets: [],
+  });
+  assert.equal(verdictBeforeAlloc.level, 'Waspada');
+  assert.equal(verdictBeforeAlloc.mood, 'neutral');
+
+  const verdictGood = budgetUtils.computeMonthlyVerdict({
+    monthKey: '2026-11',
+    budgetStatus: statusGoodSaved,
+    transactions: txsGoodSaved,
+    monthlySavingsTarget: 1000000,
+    savingsTargets: [],
+  });
+  assert.equal(verdictGood.level, 'Baik');
+  assert.equal(verdictGood.mood, 'happy');
+
+  // Case 2: Pemasukan 6.5jt <= Budget 7jt, Belanja 7.5jt -> noSisaWarning & expenditure > income -> Buruk
+  const txsShort = [
+    { id: '1', category_id: 'inc-1', type: 'income', amount: 6500000, date: '2026-11-01', notes: '' },
+    { id: '2', category_id: 'exp-1', type: 'expense', amount: 7500000, date: '2026-11-10', notes: '' },
+  ];
+  const statusShort = budgetUtils.calculateMonthlyBudgetStatus({
+    monthKey: '2026-11',
+    modeHistory,
+    activeMode: 'simple',
+    configs: [],
+    simpleConfigs,
+    settlements: [],
+    transactions: txsShort,
+  });
+
+  assert.equal(statusShort.simpleSummary?.sisaPemasukan, 0);
+  assert.equal(statusShort.simpleSummary?.noSisaWarning, true);
+  assert.equal(statusShort.actualExpense > statusShort.actualIncome, true);
+  assert.equal(statusShort.simpleSummary?.monthlyBudget, 7000000);
+
+  const verdictShort = budgetUtils.computeMonthlyVerdict({
+    monthKey: '2026-11',
+    budgetStatus: statusShort,
+    transactions: txsShort,
+    monthlySavingsTarget: 1000000,
+    savingsTargets: [],
+  });
+  assert.equal(verdictShort.level, 'Buruk');
+  assert.equal(verdictShort.mood, 'sad');
+});
+
+test('Mode Lengkap Pemasukan Tambahan never inflates Biaya Bulanan and allocates proportionally to Invest/Nabung', () => {
+  const configs = [
+    {
+      effectiveFrom: '2026-11',
+      monthlyIncome: 8500000,
+      posts: [
+        { id: 'pos-biaya', name: 'Biaya Bulanan', percent: 50, amount: 4250000, kind: 'expense', color: '#ef4444' },
+        { id: 'pos-invest', name: 'Investasi', percent: 30, amount: 2550000, kind: 'investment', color: '#8b5cf6' },
+        { id: 'pos-nabung', name: 'Nabung', percent: 20, amount: 1700000, kind: 'savings', color: '#10b981' },
+      ],
+      updatedAt: '2026-11-01T00:00:00Z',
+    },
+  ];
+  const modeHistory = [{ effectiveFrom: '2026-11', mode: 'complete', updatedAt: '2026-11-01T00:00:00Z' }];
+  const txs = [
+    { id: '1', category_id: 'inc-1', type: 'income', amount: 10000000, date: '2026-11-01', notes: '' },
+    { id: '2', category_id: 'exp-1', type: 'expense', amount: 3000000, date: '2026-11-05', notes: '' },
+  ];
+
+  const status = budgetUtils.calculateMonthlyBudgetStatus({
+    monthKey: '2026-11',
+    modeHistory,
+    activeMode: 'complete',
+    configs,
+    settlements: [],
+    transactions: txs,
+  });
+
+  // Biaya Bulanan MUST remain 50% of 8.5jt = 4.25jt, NOT 50% of 10jt!
+  assert.equal(status.primaryExpensePost?.allocated, 4250000);
+  assert.equal(status.extraIncomeAllocation?.extraAmount, 1500000);
+  assert.equal(status.extraIncomeAllocation?.unallocated, 0);
+  assert.equal(status.extraIncomeAllocation?.toInvestment, 900000);
+  assert.equal(status.extraIncomeAllocation?.toSavings, 600000);
+
+  // Without Investasi/Nabung post, falls back to unallocated
+  const configsNoSav = [
+    {
+      effectiveFrom: '2026-11',
+      monthlyIncome: 8500000,
+      posts: [
+        { id: 'pos-biaya', name: 'Biaya Bulanan', percent: 100, amount: 8500000, kind: 'expense', color: '#ef4444' },
+      ],
+      updatedAt: '2026-11-01T00:00:00Z',
+    },
+  ];
+  const statusNoSav = budgetUtils.calculateMonthlyBudgetStatus({
+    monthKey: '2026-11',
+    modeHistory,
+    activeMode: 'complete',
+    configs: configsNoSav,
+    settlements: [],
+    transactions: txs,
+  });
+  assert.equal(statusNoSav.extraIncomeAllocation?.extraAmount, 1500000);
+  assert.equal(statusNoSav.extraIncomeAllocation?.unallocated, 1500000);
+});
+
+test('getBudgetModeForMonth applies switches prospectively without altering prior months', () => {
+  const modeHistory = [
+    { effectiveFrom: '2026-10', mode: 'complete', updatedAt: '2026-10-01T00:00:00Z' },
+    { effectiveFrom: '2026-12', mode: 'simple', updatedAt: '2026-12-01T00:00:00Z' },
+  ];
+
+  assert.equal(budgetUtils.getBudgetModeForMonth(modeHistory, 'simple', '2026-10'), 'complete');
+  assert.equal(budgetUtils.getBudgetModeForMonth(modeHistory, 'simple', '2026-11'), 'complete');
+  assert.equal(budgetUtils.getBudgetModeForMonth(modeHistory, 'simple', '2026-12'), 'simple');
+  assert.equal(budgetUtils.getBudgetModeForMonth(modeHistory, 'simple', '2027-01'), 'simple');
+});
+
+test('collectLegacyLocalState imports old localStorage into Mode Lengkap with confirmation flag, or returns null when empty', () => {
+  const storeEmpty = new Map();
+  const emptySync = loadTsModule(
+    '../src/lib/serverSync.ts',
+    { supabase: { supabase: null } },
+    {
+      localStorage: {
+        getItem: (k) => storeEmpty.get(k) ?? null,
+        setItem: (k, v) => storeEmpty.set(k, v),
+      },
+    }
+  );
+  assert.equal(emptySync.collectLegacyLocalState('user-1'), null);
+
+  const storeLegacy = new Map([
+    [
+      'ft_budget_configs_user-1',
+      JSON.stringify([
+        { effectiveFrom: '2026-11', monthlyIncome: 12000000, posts: [], updatedAt: '2026-11-01T00:00:00Z' },
+      ]),
+    ],
+    [
+      'ft_savings_target_items_user-1',
+      JSON.stringify([{ id: 's1', name: 'Dana Darurat', target_amount: 50000000, current_amount: 10000000 }]),
+    ],
+  ]);
+  const legacySync = loadTsModule(
+    '../src/lib/serverSync.ts',
+    { supabase: { supabase: null } },
+    {
+      localStorage: {
+        getItem: (k) => storeLegacy.get(k) ?? null,
+        setItem: (k, v) => storeLegacy.set(k, v),
+      },
+    }
+  );
+  const migrated = legacySync.collectLegacyLocalState('user-1');
+  assert.ok(migrated);
+  assert.equal(migrated.budgetMode, 'complete');
+  assert.equal(migrated.needsModeConfirmation, true);
+  assert.equal(migrated.budgetConfigs.length, 1);
+  assert.equal(migrated.savingsTargets.length, 1);
 });

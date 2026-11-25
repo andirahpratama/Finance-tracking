@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import {
@@ -15,6 +15,9 @@ import {
   GoldPortfolio,
   GoldPrices,
   GoldBrand,
+  BudgetingMode,
+  BudgetModeActivation,
+  SimpleBudgetConfig,
   MonthlyBudgetConfig,
   BudgetPost,
   MonthPostSettlement,
@@ -26,6 +29,7 @@ import {
   ClassInvestment,
   EmergencyFundPreference,
   FinancialVerdict,
+  UserServerState,
 } from '../types';
 import { INITIAL_CATEGORIES, getInitialDemoTransactions, DEFAULT_INCOME_CATEGORIES, DEFAULT_EXPENSE_CATEGORIES, getInitialDemoGoldTransactions } from '../lib/defaultData';
 import { getAppCurrency, setAppCurrency as setGlobalAppCurrency } from '../lib/formatters';
@@ -40,6 +44,13 @@ import {
   MonthlyBudgetStatus,
   MonthlyInsightTip,
 } from '../lib/budgetUtils';
+import {
+  collectLegacyLocalState,
+  createEmptyServerState,
+  fetchServerState,
+  pushServerState,
+  writeLocalCache,
+} from '../lib/serverSync';
 
 const currentYearNow = new Date().getFullYear();
 
@@ -125,7 +136,11 @@ interface FinanceContextType {
   recordSavingsTransaction: (targetId: string, amount: number, action: SavingsActionType, date: string, notes?: string) => Promise<{ error: string | null }>;
   recordSplitSavingsDeposit: (allocations: SplitSavingsAllocation[], date: string, notes?: string, fromNode?: PosTransferPayload['from']) => Promise<{ error: string | null }>;
   recordTransfer: (payload: PosTransferPayload) => Promise<{ error: string | null }>;
-  // Budgeting & Remainder Settlement
+  // Budgeting, Mode, & Remainder Settlement
+  budgetMode: BudgetingMode | null;
+  needsModeConfirmation: boolean;
+  budgetModeHistory: BudgetModeActivation[];
+  simpleBudgetConfigs: SimpleBudgetConfig[];
   budgetConfigs: MonthlyBudgetConfig[];
   postSettlements: MonthPostSettlement[];
   currentMonthBudgetStatus: MonthlyBudgetStatus;
@@ -134,7 +149,10 @@ interface FinanceContextType {
   getBudgetStatusForMonth: (monthKey: string) => MonthlyBudgetStatus;
   getVerdictForMonth: (monthKey: string) => FinancialVerdict;
   getInsightsForMonth: (monthKey: string) => MonthlyInsightTip[];
+  saveSimpleBudgetForward: (monthlyBudget: number, investPercent: number) => Promise<{ error: string | null }>;
   saveBudgetConfigForward: (monthlyIncome: number, posts: BudgetPost[]) => Promise<{ error: string | null }>;
+  switchBudgetModeForward: (mode: BudgetingMode) => Promise<{ error: string | null }>;
+  confirmBudgetMode: () => Promise<void>;
   settleMonthPostRemainder: (params: {
     monthKey: string;
     postId: string;
@@ -202,13 +220,20 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [goldPrices, setGoldPrices] = useState<GoldPrices>(DEFAULT_GOLD_PRICES);
   const [isGoldPricesLoading, setIsGoldPricesLoading] = useState<boolean>(false);
 
-  // Budgeting, Settlements, Debts, Manual & Class Investments, Emergency Fund Preference
+  // Budgeting, Mode, Settlements, Debts, Manual & Class Investments, Emergency Fund Preference
+  const [budgetMode, setBudgetMode] = useState<BudgetingMode | null>(null);
+  const [needsModeConfirmation, setNeedsModeConfirmation] = useState<boolean>(false);
+  const [budgetModeHistory, setBudgetModeHistory] = useState<BudgetModeActivation[]>([]);
+  const [simpleBudgetConfigs, setSimpleBudgetConfigs] = useState<SimpleBudgetConfig[]>([]);
   const [budgetConfigs, setBudgetConfigs] = useState<MonthlyBudgetConfig[]>([]);
   const [postSettlements, setPostSettlements] = useState<MonthPostSettlement[]>([]);
   const [debts, setDebts] = useState<DebtItem[]>([]);
   const [manualInvestments, setManualInvestments] = useState<ManualInvestment[]>([]);
   const [classInvestments, setClassInvestments] = useState<ClassInvestment[]>([]);
   const [emergencyFundPref, setEmergencyFundPref] = useState<EmergencyFundPreference | null>(null);
+
+  const serverUpdatedAtRef = useRef<string>('');
+  const syncStateRef = useRef<UserServerState>(createEmptyServerState());
 
   // Compute portfolio metrics using Average Cost Method
   const goldPortfolio = useMemo(() => {
@@ -226,14 +251,67 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return () => window.removeEventListener('app-currency-changed', handleCurrencyChange);
   }, []);
 
-  const setCurrency = useCallback((code: CurrencyCode) => {
-    setAppCurrencyState(code);
-    setGlobalAppCurrency(code);
-  }, []);
-
   const getStorageKey = useCallback((prefix: string) => {
     return `ft_${prefix}_${user?.id || 'default'}`;
   }, [user?.id]);
+
+  // Helper to apply a UserServerState into React state + local cache
+  const applyServerStateToMemory = useCallback((userId: string, state: UserServerState) => {
+    syncStateRef.current = state;
+    serverUpdatedAtRef.current = state.updatedAt || '';
+
+    setBudgetMode(state.budgetMode ?? null);
+    setNeedsModeConfirmation(Boolean(state.needsModeConfirmation));
+    setBudgetModeHistory(state.budgetModeHistory || []);
+    setSimpleBudgetConfigs(state.simpleBudgetConfigs || []);
+    setBudgetConfigs(state.budgetConfigs || []);
+    setPostSettlements(state.postSettlements || []);
+    setSavingsTargets(state.savingsTargets || []);
+    setDebts(state.debts || []);
+    setManualInvestments(state.manualInvestments || []);
+    setClassInvestments(state.classInvestments || []);
+    setGoldTransactions(state.goldTransactions || []);
+    setEmergencyFundPref(state.emergencyFundPref ?? null);
+
+    if (state.monthlySavingsTarget !== undefined) {
+      setMonthlySavingsTarget(Number(state.monthlySavingsTarget));
+    }
+    if (state.balanceThresholds) {
+      setBalanceThresholds(state.balanceThresholds);
+    }
+    if (state.appCurrency) {
+      setAppCurrencyState(state.appCurrency);
+      setGlobalAppCurrency(state.appCurrency);
+    }
+    writeLocalCache(userId, state);
+  }, []);
+
+  // Persist partial update to Supabase server (and local cache)
+  const syncPatchToServer = useCallback(async (patch: Partial<UserServerState>): Promise<{ error: string | null }> => {
+    if (!user) return { error: 'Pengguna belum login' };
+
+    const nextState: UserServerState = {
+      ...syncStateRef.current,
+      ...patch,
+      version: 2,
+      updatedAt: new Date().toISOString(),
+    };
+    syncStateRef.current = nextState;
+    serverUpdatedAtRef.current = nextState.updatedAt;
+
+    if (configured && supabase && !isGuest) {
+      return await pushServerState(user.id, nextState);
+    } else {
+      writeLocalCache(user.id, nextState);
+      return { error: null };
+    }
+  }, [user, configured, isGuest]);
+
+  const setCurrency = useCallback((code: CurrencyCode) => {
+    setAppCurrencyState(code);
+    setGlobalAppCurrency(code);
+    syncPatchToServer({ appCurrency: code });
+  }, [syncPatchToServer]);
 
   const loadLocalModuleStates = useCallback((userId: string) => {
     const readJson = <T,>(prefix: string, fallback: T): T => {
@@ -245,29 +323,39 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     };
 
-    setBudgetConfigs(readJson<MonthlyBudgetConfig[]>('budget_configs', []));
-    setPostSettlements(readJson<MonthPostSettlement[]>('post_settlements', []));
-    setDebts(readJson<DebtItem[]>('debts', []));
-    setManualInvestments(readJson<ManualInvestment[]>('manual_investments', []));
-    setClassInvestments(readJson<ClassInvestment[]>('class_investments', []));
-    setEmergencyFundPref(readJson<EmergencyFundPreference | null>('emergency_fund_pref', null));
+    const legacy = collectLegacyLocalState(userId);
+    if (legacy) {
+      applyServerStateToMemory(userId, legacy);
+      return;
+    }
 
+    const empty = createEmptyServerState();
     const goldKey = `ft_gold_transactions_${userId}`;
     const savedGoldStr = localStorage.getItem(goldKey);
+    let goldList: GoldTransaction[] = [];
     if (savedGoldStr) {
       try {
-        setGoldTransactions(JSON.parse(savedGoldStr));
+        goldList = JSON.parse(savedGoldStr);
       } catch {
-        setGoldTransactions([]);
+        goldList = [];
       }
     } else if (isGuest) {
-      const initialGold = getInitialDemoGoldTransactions(userId);
-      setGoldTransactions(initialGold);
-      localStorage.setItem(goldKey, JSON.stringify(initialGold));
-    } else {
-      setGoldTransactions([]);
+      goldList = getInitialDemoGoldTransactions(userId);
+      localStorage.setItem(goldKey, JSON.stringify(goldList));
     }
-  }, [isGuest]);
+
+    applyServerStateToMemory(userId, {
+      ...empty,
+      budgetConfigs: readJson<MonthlyBudgetConfig[]>('budget_configs', []),
+      simpleBudgetConfigs: readJson<SimpleBudgetConfig[]>('simple_budget_configs', []),
+      postSettlements: readJson<MonthPostSettlement[]>('post_settlements', []),
+      debts: readJson<DebtItem[]>('debts', []),
+      manualInvestments: readJson<ManualInvestment[]>('manual_investments', []),
+      classInvestments: readJson<ClassInvestment[]>('class_investments', []),
+      goldTransactions: goldList,
+      emergencyFundPref: readJson<EmergencyFundPreference | null>('emergency_fund_pref', null),
+    });
+  }, [isGuest, applyServerStateToMemory]);
 
   const loadData = useCallback(async () => {
     if (!user) {
@@ -351,28 +439,46 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }));
         setTransactions(formattedTx);
 
-        // 4. Savings Targets (Local Storage or DB Fallback)
-        const savedTargetsStr = localStorage.getItem(getStorageKey('savings_target_items'));
-        if (savedTargetsStr) {
-          try {
-            const parsed = JSON.parse(savedTargetsStr);
-            const cleaned = parsed.map((t: any) => {
-              if (t.is_default_preset && (t.current_amount === 2500000 || t.current_amount === 5000000 || t.current_amount === 4500000 || t.current_amount === 8000000)) {
-                return { ...t, current_amount: 0 };
-              }
-              return t;
-            });
-            setSavingsTargets(cleaned);
-          } catch {
-            setSavingsTargets([]);
+        // 4. Server-authoritative state (Budgeting, Savings Targets, Debts, Investments, Gold, Prefs)
+        const { serverState, profileRow } = await fetchServerState(user.id);
+
+        if (profileRow) {
+          if (profileRow.monthly_savings_target) {
+            setMonthlySavingsTarget(Number(profileRow.monthly_savings_target));
           }
-        } else {
-          setSavingsTargets([]);
-          localStorage.setItem(getStorageKey('savings_target_items'), JSON.stringify([]));
+          if (profileRow.balance_safe_threshold != null && profileRow.balance_warning_threshold != null) {
+            setBalanceThresholds({
+              safe: Number(profileRow.balance_safe_threshold),
+              warning: Number(profileRow.balance_warning_threshold),
+            });
+          }
         }
 
-        // 5. Load Gold, Budgeting, Debts, Manual & Class Investments (local per user)
-        loadLocalModuleStates(user.id);
+        if (serverState) {
+          // Server ALWAYS wins over localStorage
+          applyServerStateToMemory(user.id, serverState);
+        } else {
+          // One-time migration: if browser has legacy local data and server has none yet, import to server once
+          const legacyLocal = collectLegacyLocalState(user.id);
+          if (legacyLocal) {
+            const migratedState: UserServerState = {
+              ...legacyLocal,
+              ...(profileRow?.monthly_savings_target ? { monthlySavingsTarget: Number(profileRow.monthly_savings_target) } : {}),
+              ...(profileRow?.balance_safe_threshold != null && profileRow?.balance_warning_threshold != null
+                ? {
+                    balanceThresholds: {
+                      safe: Number(profileRow.balance_safe_threshold),
+                      warning: Number(profileRow.balance_warning_threshold),
+                    },
+                  }
+                : {}),
+            };
+            applyServerStateToMemory(user.id, migratedState);
+            await pushServerState(user.id, migratedState);
+          } else {
+            applyServerStateToMemory(user.id, createEmptyServerState());
+          }
+        }
 
       } catch (err) {
         console.error('Error loading Supabase data:', err);
@@ -466,6 +572,24 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     loadData();
   }, [loadData]);
 
+  // Cross-device server sync when tab regains focus or visibility (for shared husband/wife account)
+  useEffect(() => {
+    if (!user || !configured || !supabase || isGuest) return;
+    const syncOnFocus = async () => {
+      if (document.visibilityState && document.visibilityState !== 'visible') return;
+      const { serverState } = await fetchServerState(user.id);
+      if (serverState && serverState.updatedAt && serverState.updatedAt > serverUpdatedAtRef.current) {
+        applyServerStateToMemory(user.id, serverState);
+      }
+    };
+    window.addEventListener('focus', syncOnFocus);
+    document.addEventListener('visibilitychange', syncOnFocus);
+    return () => {
+      window.removeEventListener('focus', syncOnFocus);
+      document.removeEventListener('visibilitychange', syncOnFocus);
+    };
+  }, [user, configured, isGuest, applyServerStateToMemory]);
+
   // GOLD PRICES SERVICE & AUTOMATIC DAILY REFRESH
   const refreshGoldPrices = useCallback(async () => {
     setIsGoldPricesLoading(true);
@@ -509,8 +633,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // GOLD TRANSACTIONS CRUD
   const saveGoldTransactionsState = useCallback((newItems: GoldTransaction[]) => {
     setGoldTransactions(newItems);
-    localStorage.setItem(getStorageKey('gold_transactions'), JSON.stringify(newItems));
-  }, [getStorageKey]);
+    syncPatchToServer({ goldTransactions: newItems });
+  }, [syncPatchToServer]);
 
   const buyGold = async ({
     brand,
@@ -620,11 +744,11 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     await refreshGoldPrices();
   }, [refreshGoldPrices]);
 
-  // SAVINGS TARGET ITEMS CRUD & STORAGE
+  // SAVINGS TARGET ITEMS CRUD & STORAGE (Synced to Server)
   const saveSavingsTargetsState = useCallback((newItems: SavingsTargetItem[]) => {
     setSavingsTargets(newItems);
-    localStorage.setItem(getStorageKey('savings_target_items'), JSON.stringify(newItems));
-  }, [getStorageKey]);
+    syncPatchToServer({ savingsTargets: newItems });
+  }, [syncPatchToServer]);
 
   const addSavingsTargetItem = async (item: Omit<SavingsTargetItem, 'id' | 'user_id'>) => {
     if (!user) return { error: 'Pengguna belum login' };
@@ -823,7 +947,49 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return { error: null };
   };
 
-  // BUDGETING (Forward-only: applies to current & future months only)
+  // BUDGETING 2 MODES (Forward-only: applies to current & future months only, synced to server)
+  const saveSimpleBudgetForward = async (
+    monthlyBudget: number,
+    investPercent: number
+  ): Promise<{ error: string | null }> => {
+    if (!user) return { error: 'Pengguna belum login' };
+    if (monthlyBudget <= 0) return { error: 'Budget Bulanan harus lebih dari Rp 0' };
+    const cleanInvest = Math.max(0, Math.min(100, Number(investPercent) || 0));
+    const cleanSavings = Number((100 - cleanInvest).toFixed(2));
+
+    const currentMonthKey = getCurrentMonthKey();
+    const nowIso = new Date().toISOString();
+    const newConfig: SimpleBudgetConfig = {
+      effectiveFrom: currentMonthKey,
+      monthlyBudget,
+      investPercent: cleanInvest,
+      savingsPercent: cleanSavings,
+      updatedAt: nowIso,
+    };
+
+    const nextSimpleConfigs = [
+      ...simpleBudgetConfigs.filter(c => c.effectiveFrom !== currentMonthKey),
+      newConfig,
+    ].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
+
+    const nextModeHistory = [
+      ...budgetModeHistory.filter(m => m.effectiveFrom !== currentMonthKey),
+      { effectiveFrom: currentMonthKey, mode: 'simple' as BudgetingMode, updatedAt: nowIso },
+    ].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
+
+    setBudgetMode('simple');
+    setNeedsModeConfirmation(false);
+    setBudgetModeHistory(nextModeHistory);
+    setSimpleBudgetConfigs(nextSimpleConfigs);
+
+    return await syncPatchToServer({
+      budgetMode: 'simple',
+      needsModeConfirmation: false,
+      budgetModeHistory: nextModeHistory,
+      simpleBudgetConfigs: nextSimpleConfigs,
+    });
+  };
+
   const saveBudgetConfigForward = async (
     monthlyIncome: number,
     posts: BudgetPost[]
@@ -833,19 +999,62 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (posts.length === 0) return { error: 'Minimal buat satu pos budgeting' };
 
     const currentMonthKey = getCurrentMonthKey();
+    const nowIso = new Date().toISOString();
     const newConfig: MonthlyBudgetConfig = {
       effectiveFrom: currentMonthKey,
       monthlyIncome,
       posts,
-      updatedAt: new Date().toISOString(),
+      updatedAt: nowIso,
     };
 
-    // Replace config for currentMonthKey if already exists, keeping all prior months (< currentMonthKey) intact!
-    const filtered = budgetConfigs.filter(c => c.effectiveFrom !== currentMonthKey);
-    const updated = [...filtered, newConfig].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
-    setBudgetConfigs(updated);
-    localStorage.setItem(getStorageKey('budget_configs'), JSON.stringify(updated));
-    return { error: null };
+    const nextConfigs = [
+      ...budgetConfigs.filter(c => c.effectiveFrom !== currentMonthKey),
+      newConfig,
+    ].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
+
+    const nextModeHistory = [
+      ...budgetModeHistory.filter(m => m.effectiveFrom !== currentMonthKey),
+      { effectiveFrom: currentMonthKey, mode: 'complete' as BudgetingMode, updatedAt: nowIso },
+    ].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
+
+    setBudgetMode('complete');
+    setNeedsModeConfirmation(false);
+    setBudgetModeHistory(nextModeHistory);
+    setBudgetConfigs(nextConfigs);
+
+    return await syncPatchToServer({
+      budgetMode: 'complete',
+      needsModeConfirmation: false,
+      budgetModeHistory: nextModeHistory,
+      budgetConfigs: nextConfigs,
+    });
+  };
+
+  const switchBudgetModeForward = async (mode: BudgetingMode): Promise<{ error: string | null }> => {
+    if (!user) return { error: 'Pengguna belum login' };
+    const currentMonthKey = getCurrentMonthKey();
+    const nowIso = new Date().toISOString();
+
+    const nextModeHistory = [
+      ...budgetModeHistory.filter(m => m.effectiveFrom !== currentMonthKey),
+      { effectiveFrom: currentMonthKey, mode, updatedAt: nowIso },
+    ].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
+
+    setBudgetMode(mode);
+    setNeedsModeConfirmation(false);
+    setBudgetModeHistory(nextModeHistory);
+
+    return await syncPatchToServer({
+      budgetMode: mode,
+      needsModeConfirmation: false,
+      budgetModeHistory: nextModeHistory,
+    });
+  };
+
+  const confirmBudgetMode = async (): Promise<void> => {
+    if (!user) return;
+    setNeedsModeConfirmation(false);
+    await syncPatchToServer({ needsModeConfirmation: false });
   };
 
   const settleMonthPostRemainder = async ({
@@ -898,15 +1107,15 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       newSettlement,
     ];
     setPostSettlements(updated);
-    localStorage.setItem(getStorageKey('post_settlements'), JSON.stringify(updated));
+    await syncPatchToServer({ postSettlements: updated });
     return { error: null };
   };
 
   // UTANG PIUTANG CRUD
   const saveDebtsState = useCallback((items: DebtItem[]) => {
     setDebts(items);
-    localStorage.setItem(getStorageKey('debts'), JSON.stringify(items));
-  }, [getStorageKey]);
+    syncPatchToServer({ debts: items });
+  }, [syncPatchToServer]);
 
   const addDebt = async (item: Omit<DebtItem, 'id' | 'user_id' | 'created_at'>) => {
     if (!user) return { error: 'Pengguna belum login' };
@@ -946,8 +1155,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // MANUAL INVESTMENTS CRUD
   const saveManualInvestmentsState = useCallback((items: ManualInvestment[]) => {
     setManualInvestments(items);
-    localStorage.setItem(getStorageKey('manual_investments'), JSON.stringify(items));
-  }, [getStorageKey]);
+    syncPatchToServer({ manualInvestments: items });
+  }, [syncPatchToServer]);
 
   const addManualInvestment = async (item: Omit<ManualInvestment, 'id' | 'user_id' | 'created_at'>) => {
     if (!user) return { error: 'Pengguna belum login' };
@@ -978,8 +1187,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // CLASS INVESTMENTS CRUD (Investasi Leher ke Atas)
   const saveClassInvestmentsState = useCallback((items: ClassInvestment[]) => {
     setClassInvestments(items);
-    localStorage.setItem(getStorageKey('class_investments'), JSON.stringify(items));
-  }, [getStorageKey]);
+    syncPatchToServer({ classInvestments: items });
+  }, [syncPatchToServer]);
 
   const addClassInvestment = async (item: Omit<ClassInvestment, 'id' | 'user_id' | 'created_at'>) => {
     if (!user) return { error: 'Pengguna belum login' };
@@ -1008,8 +1217,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const updateEmergencyFundPref = useCallback((pref: Omit<EmergencyFundPreference, 'updatedAt'>) => {
     const full: EmergencyFundPreference = { ...pref, updatedAt: new Date().toISOString() };
     setEmergencyFundPref(full);
-    localStorage.setItem(getStorageKey('emergency_fund_pref'), JSON.stringify(full));
-  }, [getStorageKey]);
+    syncPatchToServer({ emergencyFundPref: full });
+  }, [syncPatchToServer]);
 
   // GLOBAL SAVINGS TARGET UPDATE
   const updateSavingsTarget = async (newTarget: number): Promise<{ error: string | null }> => {
@@ -1018,7 +1227,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     setMonthlySavingsTarget(newTarget);
     localStorage.setItem(getStorageKey('savings_target'), newTarget.toString());
-    return { error: null };
+    return await syncPatchToServer({ monthlySavingsTarget: newTarget });
   };
 
   // BALANCE THRESHOLDS UPDATE
@@ -1026,7 +1235,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!user) return { error: 'Pengguna belum login' };
     setBalanceThresholds(thresholds);
     localStorage.setItem(getStorageKey('balance_thresholds'), JSON.stringify(thresholds));
-    return { error: null };
+    return await syncPatchToServer({ balanceThresholds: thresholds });
   };
 
   // CATEGORY OPERATIONS
@@ -1580,14 +1789,26 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     (monthKey: string): MonthlyBudgetStatus => {
       return calculateMonthlyBudgetStatus({
         monthKey,
+        modeHistory: budgetModeHistory,
+        activeMode: budgetMode,
         configs: budgetConfigs,
+        simpleConfigs: simpleBudgetConfigs,
         settlements: postSettlements,
         transactions,
         goldTransactions,
         manualInvestments,
       });
     },
-    [budgetConfigs, postSettlements, transactions, goldTransactions, manualInvestments]
+    [
+      budgetModeHistory,
+      budgetMode,
+      budgetConfigs,
+      simpleBudgetConfigs,
+      postSettlements,
+      transactions,
+      goldTransactions,
+      manualInvestments,
+    ]
   );
 
   const getVerdictForMonth = useCallback(
@@ -1668,6 +1889,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         recordSavingsTransaction,
         recordSplitSavingsDeposit,
         recordTransfer,
+        budgetMode,
+        needsModeConfirmation,
+        budgetModeHistory,
+        simpleBudgetConfigs,
         budgetConfigs,
         postSettlements,
         currentMonthBudgetStatus,
@@ -1676,7 +1901,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         getBudgetStatusForMonth,
         getVerdictForMonth,
         getInsightsForMonth,
+        saveSimpleBudgetForward,
         saveBudgetConfigForward,
+        switchBudgetModeForward,
+        confirmBudgetMode,
         settleMonthPostRemainder,
         debts,
         addDebt,

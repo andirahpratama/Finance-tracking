@@ -98,13 +98,21 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       },
     ];
 
-    (currentMonthBudgetStatus.posts || []).forEach((p) => {
+    if (currentMonthBudgetStatus.mode === 'simple') {
       nodes.push({
-        key: `budget_post:${p.post.id}`,
-        ref: { type: 'budget_post', id: p.post.id, label: p.post.name },
+        key: 'budget_post:simple-budget',
+        ref: { type: 'budget_post', id: 'simple-budget', label: 'Budget Bulanan' },
         group: 'Pos Budgeting',
       });
-    });
+    } else {
+      (currentMonthBudgetStatus.posts || []).forEach((p) => {
+        nodes.push({
+          key: `budget_post:${p.post.id}`,
+          ref: { type: 'budget_post', id: p.post.id, label: p.post.name },
+          group: 'Pos Budgeting',
+        });
+      });
+    }
 
     savingsTargets.forEach((s) => {
       nodes.push({
@@ -115,7 +123,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     });
 
     return nodes;
-  }, [currentMonthBudgetStatus.posts, savingsTargets]);
+  }, [currentMonthBudgetStatus.mode, currentMonthBudgetStatus.posts, savingsTargets]);
 
   useEffect(() => {
     if (!isOpen) return;

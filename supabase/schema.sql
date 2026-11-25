@@ -20,9 +20,10 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 2b. ADD THRESHOLD COLUMNS IF TABLE ALREADY EXISTS (idempotent migration)
+-- 2b. ADD THRESHOLD & APP_STATE COLUMNS IF TABLE ALREADY EXISTS (idempotent migration)
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS balance_safe_threshold NUMERIC(15, 2) DEFAULT 1000000.00;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS balance_warning_threshold NUMERIC(15, 2) DEFAULT 500000.00;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS app_state JSONB;
 
 
 -- 3. CREATE CATEGORIES TABLE
